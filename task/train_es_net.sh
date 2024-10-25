@@ -11,12 +11,12 @@ cat <<EOF > model_params.json
     "feature_dim": 1,
     "ext_dim": 0,
     "gnss_feature_dim": 4,
-    "embed_dim": 16,
-    "skip_dim": 16,
+    "embed_dim": 6,
+    "skip_dim": 6,
     "lape_dim": 30,
-    "geo_num_heads": 4,
-    "sem_num_heads": 2,
-    "t_num_heads": 2,
+    "geo_num_heads": 1,
+    "sem_num_heads": 1,
+    "t_num_heads": 1,
     "mlp_ratio": 1,
     "qkv_bias": true,
     "drop": 0.0,
@@ -27,7 +27,7 @@ cat <<EOF > model_params.json
     "enc_depth": 1,
     "type_ln": "pre",
     "output_dim": 1,
-    "input_window": 1400,
+    "input_window": 1,
     "output_window": 1,
     "predict_day_class": 14,
     "far_mask_delta": 0,
@@ -44,12 +44,12 @@ python train.py \
     --batch-size 1 \
     --val-batch-size 1 \
     --max-epochs 100 \
-    --device 0 \
+    --device 1 \
     --lr 1e-5 \
     --save-dir $SAVE_DIR \
     --log-dir $LOG_DIR \
     --model_params "model_params.json" \
-    --window-size 1400 \
+    --window-size 14 \
     --forecast-horizon 14 \
     --lape-dim 30 \
     --far-mask-delta 30 \

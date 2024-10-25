@@ -226,12 +226,12 @@ class EarthquakeGNSSDataset(Dataset):
         self.length = len(earthquake_data) - window_size - forecast_horizon + 1
         self.node_ = len(earthquake_data)
         self.area = area
-        
+        self.es_geo_mask, self.es_sem_mask, self.gnss_geo_mask = generate_masks(es_geo_matrix, es_sem_matrix, gnss_geo_matrix, far_mask_delta, dtw_delta)
         # Generate masks and store them in a dictionary
         self.masks = {
-            'es_geo_mask': generate_masks(es_geo_matrix, es_sem_matrix, gnss_geo_matrix, far_mask_delta, dtw_delta)[0],
-            'es_sem_mask': generate_masks(es_geo_matrix, es_sem_matrix, gnss_geo_matrix, far_mask_delta, dtw_delta)[1],
-            'gnss_geo_mask': generate_masks(es_geo_matrix, es_sem_matrix, gnss_geo_matrix, far_mask_delta, dtw_delta)[2],
+            'es_geo_mask': self.es_geo_mask.bool(),
+            'es_sem_mask': self.es_sem_mask.bool(),
+            'gnss_geo_mask': self.gnss_geo_mask.bool(),
             'lap_ex': graph_laplacian_embedding(es_geo_matrix, lape_dim),
             'lap_gnss': graph_laplacian_embedding(gnss_geo_matrix, lape_dim),
         }

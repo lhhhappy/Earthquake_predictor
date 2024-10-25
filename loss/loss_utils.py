@@ -59,10 +59,11 @@ class CustomCrossEntropyLoss(nn.Module):
     """
     Cross-entropy loss for a three-class classification task.
     """
-    def __init__(self):
+    def __init__(self,predict_day_class=14):#fix the predict_day_class
         super(CustomCrossEntropyLoss, self).__init__()
         # Initialize the cross-entropy loss function
         self.criterion = nn.CrossEntropyLoss()
+        self.predict_day_class = predict_day_class
     
     def forward(self, logits, targets):
         """
@@ -73,13 +74,13 @@ class CustomCrossEntropyLoss(nn.Module):
         :return: Scalar loss value
         """
         # Reshape logits from (batch_size, num, 3) to (batch_size * num, 3)
-        logits = logits.view(-1, 3)
+        logits = logits.view(-1, self.predict_day_class)
         
         # Reshape targets from (batch_size, num) to (batch_size * num)
         targets = targets.view(-1)
         
         # Compute cross-entropy loss
-        loss = self.criterion(logits, targets)
+        loss = self.criterion(logits, targets.long())
         
         return loss
 def get_loss(energy_loss='nse', day_loss='cross_entropy'):

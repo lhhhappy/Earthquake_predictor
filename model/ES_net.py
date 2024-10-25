@@ -217,6 +217,7 @@ class STSelfAttention(nn.Module):
             if geo_mask is not None:
                 # Adjust geo_mask to shape (B, 1, 1, N, N) to broadcast over T and geo_num_heads
                 geo_mask = geo_mask.unsqueeze(1).unsqueeze(2)  # Shape: (B, 1, 1, N, N)
+                geo_mask = geo_mask.bool()
                 geo_attn = geo_attn.masked_fill(geo_mask, float('-inf'))
             geo_attn = geo_attn.softmax(dim=-1)
             geo_attn = self.geo_attn_drop(geo_attn)
@@ -236,6 +237,7 @@ class STSelfAttention(nn.Module):
             if sem_mask is not None:
                 # Adjust sem_mask to shape (B, 1, 1, N, N) to broadcast over T and sem_num_heads
                 sem_mask = sem_mask.unsqueeze(1).unsqueeze(2)  # Shape: (B, 1, 1, N, N)
+                sem_mask = sem_mask.bool()
                 sem_attn = sem_attn.masked_fill(sem_mask, float('-inf'))
             sem_attn = sem_attn.softmax(dim=-1)
             sem_attn = self.sem_attn_drop(sem_attn)
@@ -500,6 +502,7 @@ class ES_net(nn.Module):
         skip_gnss_week = self.day2week(skip_gnss_day)
 
         ENC_ST = self.cross_attn(skip_earthquake, skip_gnss_week) + skip_earthquake
+        print(ENC_ST.shape)
         energy_predict = self.es_conv1(F.relu(ENC_ST))
         energy_predict = self.es_conv2(F.relu(energy_predict.permute(0, 3, 2, 1))).permute(0, 3, 2, 1).squeeze(1)
 
