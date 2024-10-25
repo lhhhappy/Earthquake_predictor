@@ -1,23 +1,26 @@
-[<img src="LLM" align="right" width="25%" padding-right="350">]()
-
-# `EARTHQUAKE_PREDICTOR.GIT`
-
-#### <code>❯ REPLACE-ME</code>
-
-<p align="left">
-	<img src="https://img.shields.io/github/license/lhhhappy/Earthquake_predictor.git?style=flat-square&logo=opensourceinitiative&logoColor=white&color=00a1ff" alt="license">
-	<img src="https://img.shields.io/github/last-commit/lhhhappy/Earthquake_predictor.git?style=flat-square&logo=git&logoColor=white&color=00a1ff" alt="last-commit">
-	<img src="https://img.shields.io/github/languages/top/lhhhappy/Earthquake_predictor.git?style=flat-square&color=00a1ff" alt="repo-top-language">
-	<img src="https://img.shields.io/github/languages/count/lhhhappy/Earthquake_predictor.git?style=flat-square&color=00a1ff" alt="repo-language-count">
+<p align="center">
+  <img src="LLM" width="60%" alt="EARTHQUAKE_PREDICTOR.GIT-logo">
 </p>
-<p align="left">
+<p align="center">
+    <h1 align="center">EARTHQUAKE_PREDICTOR.GIT</h1>
+</p>
+<p align="center">
+    <em><code>❯ REPLACE-ME</code></em>
+</p>
+<p align="center">
+	<img src="https://img.shields.io/github/license/lhhhappy/Earthquake_predictor.git?style=for-the-badge&logo=opensourceinitiative&logoColor=white&color=7400ff" alt="license">
+	<img src="https://img.shields.io/github/last-commit/lhhhappy/Earthquake_predictor.git?style=for-the-badge&logo=git&logoColor=white&color=7400ff" alt="last-commit">
+	<img src="https://img.shields.io/github/languages/top/lhhhappy/Earthquake_predictor.git?style=for-the-badge&color=7400ff" alt="repo-top-language">
+	<img src="https://img.shields.io/github/languages/count/lhhhappy/Earthquake_predictor.git?style=for-the-badge&color=7400ff" alt="repo-language-count">
+</p>
+<p align="center">
 		<em>Built with the tools and technologies:</em>
 </p>
 <p align="center">
-	<img src="https://img.shields.io/badge/GNU%20Bash-4EAA25.svg?style=flat-square&logo=GNU-Bash&logoColor=white" alt="GNU%20Bash">
-	<img src="https://img.shields.io/badge/Jupyter-F37626.svg?style=flat-square&logo=Jupyter&logoColor=white" alt="Jupyter">
-	<img src="https://img.shields.io/badge/Python-3776AB.svg?style=flat-square&logo=Python&logoColor=white" alt="Python">
-	<img src="https://img.shields.io/badge/JSON-000000.svg?style=flat-square&logo=JSON&logoColor=white" alt="JSON">
+	<img src="https://img.shields.io/badge/GNU%20Bash-4EAA25.svg?style=for-the-badge&logo=GNU-Bash&logoColor=white" alt="GNU%20Bash">
+	<img src="https://img.shields.io/badge/Jupyter-F37626.svg?style=for-the-badge&logo=Jupyter&logoColor=white" alt="Jupyter">
+	<img src="https://img.shields.io/badge/Python-3776AB.svg?style=for-the-badge&logo=Python&logoColor=white" alt="Python">
+	<img src="https://img.shields.io/badge/JSON-000000.svg?style=for-the-badge&logo=JSON&logoColor=white" alt="JSON">
 </p>
 
 <br>
@@ -59,35 +62,19 @@
     ├── README.md
     ├── data_preprocess_pipeline
     │   ├── __pycache__
-    │   │   └── utils.cpython-310.pyc
     │   ├── pipeline.py
     │   └── utils.py
     ├── dataset
     │   ├── __init__.py
     │   ├── __pycache__
-    │   │   ├── __init__.cpython-310.pyc
-    │   │   └── dataset_utils.cpython-310.pyc
     │   ├── dataset_test.ipynb
     │   └── dataset_utils.py
     ├── experiment
     │   ├── data_preprocess_ipynb
-    │   │   ├── data_preposs_earthquake.ipynb
-    │   │   ├── data_preposs_gnss.ipynb
-    │   │   ├── dataset.ipynb
-    │   │   ├── earthquake_usgs.ipynb
-    │   │   └── plot_GNSS.ipynb
     │   └── data_preprocess_py
-    │       ├── down_earthquake_data.py
-    │       ├── download_GNSS_data.py
-    │       ├── get_aij.py
-    │       ├── log_energy.py
-    │       └── usgs_data_area_save.py
     ├── loss
     │   ├── __init__.py
     │   ├── __pycache__
-    │   │   ├── __init__.cpython-310.pyc
-    │   │   ├── loss.cpython-310.pyc
-    │   │   └── loss_utils.cpython-310.pyc
     │   ├── loss_test.ipynb
     │   └── loss_utils.py
     ├── model
@@ -95,8 +82,6 @@
     │   ├── Earthquake_net.ipynb
     │   ├── __init__.py
     │   └── __pycache__
-    │       ├── ES_net.cpython-310.pyc
-    │       └── __init__.cpython-310.pyc
     ├── model_params.json
     ├── station_dict_all.pkl
     ├── task
