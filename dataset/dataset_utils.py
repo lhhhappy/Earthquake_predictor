@@ -80,6 +80,8 @@ class EarthquakeGNSSDataset(Dataset):
             idx + self.window_size:idx + self.window_size + self.forecast_horizon
         ]
 
+        earthquake_happen = torch.tensor((earthquake_data_future >= self.earthquake_threshold).any(axis=0).to_numpy(), dtype=torch.bool)
+
         # 计算历史和未来的对数能量
         log_energy_history = calculate_energy_in_time_window(earthquake_data_history).values.T
         log_energy_future = calculate_energy_in_time_window(earthquake_data_future).values.T
@@ -125,63 +127,18 @@ class EarthquakeGNSSDataset(Dataset):
             earthquake_data_future_day, dtype=torch.float32
         ).squeeze(-1)
 
-        sample_masks = {
-            'es_geo_mask': self.es_geo_mask,
-            'es_sem_mask': self.es_sem_mask,
-            'gnss_geo_mask': sample_gnss_geo_mask,
-            'lap_ex': self.lap_ex,
-            'lap_gnss': sample_lap_gnss
-        }
-
         return {
             'log_energy_history': log_energy_history,
             'gnss_data_history': gnss_data_history,
             'log_energy_future': log_energy_future,
             'earthquake_data_future_day': earthquake_data_future_day,
-            'masks': sample_masks
-        }
-
-    def collate_fn(self, batch):
-        batch_data = {}
-        # 堆叠固定形状的数据
-        batch_data['log_energy_history'] = torch.stack([item['log_energy_history'] for item in batch])
-        batch_data['log_energy_future'] = torch.stack([item['log_energy_future'] for item in batch])
-        batch_data['earthquake_data_future_day'] = torch.stack([item['earthquake_data_future_day'] for item in batch])
-
-        # 处理可变数量的站点
-        max_num_stations = max(item['gnss_data_history'].shape[0] for item in batch)
-        gnss_data_histories = []
-        gnss_geo_masks = []
-        lap_gnss_list = []
-
-        for item in batch:
-            num_stations = item['gnss_data_history'].shape[0]
-            # 计算需要填充的尺寸
-            pad_stations = max_num_stations - num_stations
-
-            # 填充gnss_data_history
-            padded_data = F.pad(item['gnss_data_history'], (0, 0, 0, 0, 0, pad_stations), "constant", 0)
-            gnss_data_histories.append(padded_data)
-
-            # 填充gnss_geo_mask
-            padded_mask = F.pad(item['masks']['gnss_geo_mask'], (0, pad_stations, 0, pad_stations), "constant", False)
-            gnss_geo_masks.append(padded_mask)
-
-            # 填充lap_gnss
-            padded_lap = F.pad(item['masks']['lap_gnss'], (0, 0, 0, pad_stations), "constant", 0)
-            lap_gnss_list.append(padded_lap)
-
-        # 堆叠填充后的数据
-        batch_data['gnss_data_history'] = torch.stack(gnss_data_histories)
-        batch_data['masks'] = {
             'es_geo_mask': self.es_geo_mask,
             'es_sem_mask': self.es_sem_mask,
-            'gnss_geo_mask': torch.stack(gnss_geo_masks),
+            'gnss_geo_mask': sample_gnss_geo_mask,
             'lap_ex': self.lap_ex,
-            'lap_gnss': torch.stack(lap_gnss_list)
+            'lap_gnss': sample_lap_gnss,
+            "earthquake_happen":earthquake_happen
         }
-
-        return batch_data
 
     @staticmethod
     def max_consecutive_trues(arr):
@@ -418,103 +375,136 @@ def generate_masks(es_geo_matrix, es_sem_matrix, gnss_geo_matrix, far_mask_delta
     gnss_geo_mask = gnss_geo_matrix >= far_mask_delta
 
     return geo_mask, sem_mask, gnss_geo_mask
-    
+
 
 class CombinedEarthquakeGNSSDataset(Dataset):
     def __init__(self, region_datasets):
         """
-        Class to combine datasets from different regions.
-        
-        :param region_datasets: Dictionary where keys are region names and values are instances of EarthquakeGNSSDataset.
+        用于组合不同区域数据集的类。
+
+        参数：
+        - region_datasets: 一个字典，键为区域名称，值为 EarthquakeGNSSDataset 的实例。
         """
         self.region_datasets = region_datasets
         self.region_names = list(region_datasets.keys())
+        # 计算每个区域数据集的长度
         self.lengths = {region: len(ds) for region, ds in region_datasets.items()}
+        # 计算总长度
         self.total_length = sum(self.lengths.values())
-        self.max_gnss_nodes = max(ds[0]['gnss_data_history'].shape[1] for ds in region_datasets.values())
 
     def __len__(self):
         return self.total_length
 
     def __getitem__(self, idx):
         """
-        Retrieve an item based on the global index. Maps the global index to a specific region dataset.
+        根据全局索引检索一个样本。将全局索引映射到特定区域的数据集。
         """
         for region in self.region_names:
             if idx < self.lengths[region]:
                 data = self.region_datasets[region][idx]
-                data['region'] = region  # Include the region name in the data for identification.
+                data['region'] = region  # 在数据中包含区域名称，便于识别。
                 return data
             idx -= self.lengths[region]
         raise IndexError("Index out of range in CombinedEarthquakeGNSSDataset.")
 
     def collate_fn(self, batch):
         """
-        Custom collate function to handle batches with different numbers of GNSS nodes.
-        
-        :param batch: List of data samples from different regions.
-        :return: A dictionary containing combined batched data with region-specific masks.
-        """
-        # Determine the maximum number of GNSS nodes in this batch.
-        max_gnss_nodes_in_batch = max(item['gnss_data_history'].shape[1] for item in batch)
+        自定义的 collate 函数，用于处理具有不同 GNSS 节点数量的批次。
 
-        # Initialize lists to store the padded data and masks.
-        log_energy_history = []
-        gnss_data_history = []
-        log_energy_future = []
-        earthquake_data_future_day = []
+        参数：
+        - batch: 来自不同区域的数据样本列表。
+        返回：
+        - 一个包含组合批次数据和区域特定掩码的字典。
+        """
+        # 动态计算此批次中 GNSS 节点的最大数量
+        max_gnss_nodes_in_batch = max(item['gnss_data_history'].shape[0] for item in batch)
+        max_lape_dim_in_batch = max(item['lap_gnss'].shape[1] for item in batch)
+        # 初始化列表以存储填充后的数据和掩码
+        log_energy_history_list = []
+        gnss_data_history_list = []
+        log_energy_future_list = []
+        earthquake_data_future_day_list = []
         es_geo_masks = []
         es_sem_masks = []
-        combined_gnss_masks = []
-        lap_ex_masks = []
-        lap_gnss_masks = []
-
-        # Pad each data sample's GNSS data and masks to match the maximum number of nodes.
+        gnss_geo_masks = []
+        lap_ex_list = []
+        lap_gnss_list = []
+        earthquake_happen_list = []
+        # 遍历批次中的每个样本，填充 GNSS 数据和掩码以匹配最大节点数
         for item in batch:
-            n_gnss_nodes = item['gnss_data_history'].shape[1]
-            pad_size = max_gnss_nodes_in_batch - n_gnss_nodes
+            num_gnss_nodes = item['gnss_data_history'].shape[0]
+            pad_gnss_nodes = max_gnss_nodes_in_batch - num_gnss_nodes
+            
+            # 填充 gnss_data_history，在节点维度（第一个维度）进行填充
+            padded_gnss_data = F.pad(
+                item['gnss_data_history'],
+                pad=(0, 0, 0, 0, 0, pad_gnss_nodes),  # (feature_dim_pad, window_size_pad, node_dim_pad)
+                mode='constant',
+                value=0
+            )
 
-            # Pad the GNSS data along the node dimension (dim=1)
-            padded_gnss_data = F.pad(item['gnss_data_history'], (0, 0, 0, pad_size))
-            # Append the data.
-            log_energy_history.append(item['log_energy_history'])
-            gnss_data_history.append(padded_gnss_data)
-            log_energy_future.append(item['log_energy_future'])
-            earthquake_data_future_day.append(item['earthquake_data_future_day'])
+            # 追加数据
+            log_energy_history_list.append(item['log_energy_history'])
+            gnss_data_history_list.append(padded_gnss_data)
+            log_energy_future_list.append(item['log_energy_future'])
+            earthquake_data_future_day_list.append(item['earthquake_data_future_day'])
 
-            # Retrieve region-specific masks.
+            # 获取区域特定的掩码
             region_name = item['region']
-            region_masks = self.region_datasets[region_name].get_masks()
+            region_dataset = self.region_datasets[region_name]
 
-            # Pad 'lap_gnss' and 'gnss_geo_mask' to match the maximum number of nodes.
-            padded_gnss_geo_mask = F.pad(region_masks['gnss_geo_mask'], (0, pad_size,0, pad_size), value=1)
+            # 填充 gnss_geo_mask
+            gnss_geo_mask = item['gnss_geo_mask']
+            padded_gnss_geo_mask = F.pad(
+                gnss_geo_mask,
+                pad=(0, pad_gnss_nodes, 0, pad_gnss_nodes),
+                mode='constant',
+                value=1  # 对于掩码，填充值为 1，表示连接不存在
+            )
 
-            padded_lap_gnss = F.pad(region_masks['lap_gnss'], (0, 0, 0, pad_size))
-            # Combine GNSS padding mask with padded GNSS geo mask.
-            gnss_padding_mask = torch.cat([torch.ones(n_gnss_nodes), torch.zeros(pad_size)], dim=0)
-            combined_gnss_mask = gnss_padding_mask.unsqueeze(-1) * padded_gnss_geo_mask
+            # 填充 lap_gnss
+            lap_gnss = item['lap_gnss']
+            padded_lap_gnss = F.pad(
+                lap_gnss,
+                pad=(0, max_lape_dim_in_batch - lap_gnss.shape[1], 0, pad_gnss_nodes),
+                mode='constant',
+                value=0
+            )
 
-            # Store the masks.
-            es_geo_masks.append(region_masks['es_geo_mask'])
-            es_sem_masks.append(region_masks['es_sem_mask'])
-            combined_gnss_masks.append(combined_gnss_mask)
-            lap_ex_masks.append(region_masks['lap_ex'])
-            lap_gnss_masks.append(padded_lap_gnss)
+            # 填充 es_geo_mask 和 es_sem_mask，使其形状一致
+            es_geo_mask = item['es_geo_mask']
+            es_sem_mask = item['es_sem_mask']
+            # 假设 es_geo_mask 和 es_sem_mask 形状相同，不需要填充
+            # 如果需要根据区域调整填充，可以在此添加相应的代码
 
-        # Stack the data to create tensors for the batch.
-        log_energy_history = torch.stack(log_energy_history)
-        gnss_data_history = torch.stack(gnss_data_history)
-        log_energy_future = torch.stack(log_energy_future)
-        earthquake_data_future_day = torch.stack(earthquake_data_future_day)
+            # 填充 lap_ex（地震站点的嵌入），如果不同区域的形状不同，需要统一
+            lap_ex = item['lap_ex']
+            # 假设 lap_ex 在不同区域之间形状相同，不需要填充
 
-        # Combine the padded masks.
+            # 存储掩码和嵌入
+            es_geo_masks.append(es_geo_mask)
+            es_sem_masks.append(es_sem_mask)
+            gnss_geo_masks.append(padded_gnss_geo_mask)
+            lap_ex_list.append(lap_ex)
+            lap_gnss_list.append(padded_lap_gnss)
+            earthquake_happen_list.append(item['earthquake_happen'])
+
+        # 将数据堆叠，创建批次张量
+        
+        log_energy_history = torch.stack(log_energy_history_list)
+        gnss_data_history = torch.stack(gnss_data_history_list)
+        log_energy_future = torch.stack(log_energy_future_list)
+        earthquake_data_future_day = torch.stack(earthquake_data_future_day_list)
+
+        # 对掩码和嵌入进行堆叠
         es_geo_masks = torch.stack(es_geo_masks)
         es_sem_masks = torch.stack(es_sem_masks)
-        combined_gnss_masks = torch.stack(combined_gnss_masks)
-        lap_ex_masks = torch.stack(lap_ex_masks)
-        lap_gnss_masks = torch.stack(lap_gnss_masks)
+        gnss_geo_masks = torch.stack(gnss_geo_masks)
+        lap_ex = torch.stack(lap_ex_list)
+        lap_gnss = torch.stack(lap_gnss_list)
+        earthquake_happen = torch.stack(earthquake_happen_list)
 
-        # Combine into a dictionary.
+        # 组合成字典
         batch_data = {
             'log_energy_history': log_energy_history,
             'gnss_data_history': gnss_data_history,
@@ -522,9 +512,11 @@ class CombinedEarthquakeGNSSDataset(Dataset):
             'earthquake_data_future_day': earthquake_data_future_day,
             'es_geo_mask': es_geo_masks,
             'es_sem_mask': es_sem_masks,
-            'combined_gnss_mask': combined_gnss_masks,
-            'lap_ex': lap_ex_masks,
-            'lap_gnss': lap_gnss_masks
+            'gnss_geo_mask': gnss_geo_masks,
+            'lap_ex': lap_ex,
+            'lap_gnss': lap_gnss,
+            'earthquake_happen':earthquake_happen
+
         }
 
         return batch_data
