@@ -9,6 +9,7 @@ import torch
 from torch.utils.data import Dataset
 from scipy.linalg import eigh
 from torch.nn import functional as F
+from scipy.interpolate import interp1d
 
 def parse_str_list(cell):
     try:
@@ -21,68 +22,290 @@ def get_gnss_i(series, index):
     return series.apply(lambda x: x[index] if isinstance(x, list) and len(x) > index else None)
 
 
-import numpy as np
-import pandas as pd
-from scipy.interpolate import interp1d
+class EarthquakeGNSSDataset(Dataset):
+    def __init__(self, 
+                 area,
+                 earthquake_data, gnss_data,
+                 es_geo_matrix, es_sem_matrix, gnss_geo_matrix,
+                 far_mask_delta, dtw_delta, lape_dim,
+                 window_size=14, forecast_horizon=14, earthquake_threshold=4.0,
+                 missing_threshold=5):
+        """
+        地震-GNSS数据集的自定义Dataset类。
+
+        参数：
+        - area: 区域名称。
+        - earthquake_data: 包含地震数据的DataFrame。
+        - gnss_data: 包含GNSS数据的DataFrame。
+        - es_geo_matrix: 地震站点的地理邻接矩阵。
+        - es_sem_matrix: 地震站点的语义邻接矩阵。
+        - gnss_geo_matrix: GNSS站点的地理邻接矩阵。
+        - far_mask_delta: 远距离掩码的阈值。
+        - dtw_delta: DTW掩码的阈值。
+        - lape_dim: 图拉普拉斯嵌入的维度数。
+        - window_size: 历史窗口大小，默认14。
+        - forecast_horizon: 预测窗口大小，默认14。
+        - earthquake_threshold: 地震震级阈值，默认4.0。
+        - missing_threshold: 允许的最大连续缺失值数量，默认5。
+        """
+        self.area = area
+        self.earthquake_data = earthquake_data
+        self.gnss_data = gnss_data
+        self.window_size = window_size
+        self.forecast_horizon = forecast_horizon
+        self.earthquake_threshold = earthquake_threshold
+        self.missing_threshold = missing_threshold
+        self.lape_dim = lape_dim
+
+        # 计算数据集的长度
+        self.length = len(earthquake_data) - window_size - forecast_horizon + 1
+
+        # 生成掩码
+        self.es_geo_mask, self.es_sem_mask, self.gnss_geo_mask = generate_masks(
+            es_geo_matrix, es_sem_matrix, gnss_geo_matrix, far_mask_delta, dtw_delta
+        )
+        # 计算地震站点的图拉普拉斯嵌入
+        self.lap_ex = graph_laplacian_embedding(torch.tensor(es_geo_matrix.values), lape_dim)
+
+    def __len__(self):
+        return self.length
+
+    def __name__(self):
+        return self.area
+
+    def __getitem__(self, idx):
+        # 获取历史和未来的地震数据
+        earthquake_data_history = self.earthquake_data.iloc[idx:idx + self.window_size]
+        earthquake_data_future = self.earthquake_data.iloc[
+            idx + self.window_size:idx + self.window_size + self.forecast_horizon
+        ]
+
+        # 计算历史和未来的对数能量
+        log_energy_history = calculate_energy_in_time_window(earthquake_data_history).values.T
+        log_energy_future = calculate_energy_in_time_window(earthquake_data_future).values.T
+
+        # 获取未来地震事件发生的天数
+        earthquake_data_future_day = find_first_earthquake(
+            earthquake_data_future, self.earthquake_threshold
+        )
+
+        # 获取GNSS数据的历史部分并处理
+        gnss_data_history = self.gnss_data.iloc[idx:idx + self.window_size].values  # 形状：(window_size, num_stations)
+
+        # 转置后，每个元素代表一个站点的时间序列数据
+        gnss_data_history = gnss_data_history.T  # 形状：(num_stations, window_size)
+
+        # 将每个站点的数据转换为固定长度的数组，形状：(num_stations, window_size, num_features)
+        gnss_data_history = np.array([
+            convert_to_fixed_length_array(station_data) for station_data in gnss_data_history
+        ])
+
+        # 检测并移除具有长连续缺失数据的站点
+        missing_mask = np.isnan(gnss_data_history).all(axis=2)  # 形状：(num_stations, window_size)
+        max_missing_lengths = self.max_consecutive_trues(missing_mask)
+        stations_to_keep = max_missing_lengths <= self.missing_threshold
+
+        # 更新gnss_data_history和gnss_geo_mask
+        gnss_data_history = gnss_data_history[stations_to_keep]
+        sample_gnss_geo_mask = self.gnss_geo_mask[stations_to_keep][:, stations_to_keep]
+
+        # 生成GNSS数据的图拉普拉斯嵌入
+        sample_lap_gnss = graph_laplacian_embedding(sample_gnss_geo_mask.float(), self.lape_dim)
+
+        # 填充缺失值
+        gnss_data_history = fill_nan_with_interpolation(gnss_data_history)
+
+        # 将数据转换为张量
+        log_energy_history = torch.tensor(
+            log_energy_history, dtype=torch.float32
+        ).permute(1, 0).unsqueeze(-1)
+        log_energy_future = torch.tensor(log_energy_future, dtype=torch.float32)
+        gnss_data_history = torch.tensor(gnss_data_history, dtype=torch.float32)
+        earthquake_data_future_day = torch.tensor(
+            earthquake_data_future_day, dtype=torch.float32
+        ).squeeze(-1)
+
+        sample_masks = {
+            'es_geo_mask': self.es_geo_mask,
+            'es_sem_mask': self.es_sem_mask,
+            'gnss_geo_mask': sample_gnss_geo_mask,
+            'lap_ex': self.lap_ex,
+            'lap_gnss': sample_lap_gnss
+        }
+
+        return {
+            'log_energy_history': log_energy_history,
+            'gnss_data_history': gnss_data_history,
+            'log_energy_future': log_energy_future,
+            'earthquake_data_future_day': earthquake_data_future_day,
+            'masks': sample_masks
+        }
+
+    def collate_fn(self, batch):
+        batch_data = {}
+        # 堆叠固定形状的数据
+        batch_data['log_energy_history'] = torch.stack([item['log_energy_history'] for item in batch])
+        batch_data['log_energy_future'] = torch.stack([item['log_energy_future'] for item in batch])
+        batch_data['earthquake_data_future_day'] = torch.stack([item['earthquake_data_future_day'] for item in batch])
+
+        # 处理可变数量的站点
+        max_num_stations = max(item['gnss_data_history'].shape[0] for item in batch)
+        gnss_data_histories = []
+        gnss_geo_masks = []
+        lap_gnss_list = []
+
+        for item in batch:
+            num_stations = item['gnss_data_history'].shape[0]
+            # 计算需要填充的尺寸
+            pad_stations = max_num_stations - num_stations
+
+            # 填充gnss_data_history
+            padded_data = F.pad(item['gnss_data_history'], (0, 0, 0, 0, 0, pad_stations), "constant", 0)
+            gnss_data_histories.append(padded_data)
+
+            # 填充gnss_geo_mask
+            padded_mask = F.pad(item['masks']['gnss_geo_mask'], (0, pad_stations, 0, pad_stations), "constant", False)
+            gnss_geo_masks.append(padded_mask)
+
+            # 填充lap_gnss
+            padded_lap = F.pad(item['masks']['lap_gnss'], (0, 0, 0, pad_stations), "constant", 0)
+            lap_gnss_list.append(padded_lap)
+
+        # 堆叠填充后的数据
+        batch_data['gnss_data_history'] = torch.stack(gnss_data_histories)
+        batch_data['masks'] = {
+            'es_geo_mask': self.es_geo_mask,
+            'es_sem_mask': self.es_sem_mask,
+            'gnss_geo_mask': torch.stack(gnss_geo_masks),
+            'lap_ex': self.lap_ex,
+            'lap_gnss': torch.stack(lap_gnss_list)
+        }
+
+        return batch_data
+
+    @staticmethod
+    def max_consecutive_trues(arr):
+        """
+        高效计算每行最大连续True的数量。
+
+        参数：
+        - arr: 布尔型numpy数组，形状为(num_stations, window_size)
+
+        返回：
+        - 每个站点的最大连续True计数，形状为(num_stations,)
+        """
+        # 将布尔值转换为整数
+        arr_int = arr.astype(int)
+        # 在每行的开头和结尾添加零
+        padded = np.pad(arr_int, ((0, 0), (1, 1)), mode='constant', constant_values=0)
+        # 计算差分
+        diff = np.diff(padded, axis=1)
+        # 找到连续True的开始和结束索引
+        run_starts = np.where(diff == 1)
+        run_ends = np.where(diff == -1)
+        # 计算连续True的长度
+        run_lengths = run_ends[1] - run_starts[1]
+        # 初始化最大长度数组
+        max_lengths = np.zeros(arr.shape[0], dtype=int)
+        # 使用np.maximum.at更新每个站点的最大连续True长度
+        np.maximum.at(max_lengths, run_starts[0], run_lengths)
+        return max_lengths
+
+# 支持函数
+def has_consecutive_nans(series, window=30):
+    """
+    检查序列中是否存在连续缺失值。
+
+    参数:
+    - series (pd.Series): 要检查的序列。
+    - window (int): 连续缺失值的窗口大小。
+
+    返回:
+    - bool: 是否存在连续的缺失值。
+    """
+    return series.isna().rolling(window=window).sum().max() >= window
+
+def convert_to_fixed_length_array(data, length=4):
+    """
+    将数据转换为固定长度的数组。
+
+    参数：
+    - data: 输入数据，类型为数组或列表，长度为window_size。
+    - length: 目标长度。
+
+    返回：
+    - 形状为(window_size, length)的numpy数组。
+    """
+    # data是长度为window_size的数组，包含每个时间步的数据
+    fixed_length_array = []
+    for x in data:
+        if isinstance(x, (list, np.ndarray)):
+            # 截取或填充x以达到固定长度
+            x = x[:length]
+            if len(x) < length:
+                x = list(x) + [np.nan] * (length - len(x))
+        else:
+            # 如果x不是列表或数组，用NaN填充
+            x = [np.nan] * length
+        fixed_length_array.append(x)
+    return np.array(fixed_length_array)  # 形状：(window_size, length)
 
 def fill_nan_with_interpolation(data):
     """
-    对数据中的nan进行插值填充，使用矢量化操作进行优化。
+    使用插值填充数据中的NaN值。
+
+    参数：
+    - data: 形状为(num_stations, window_size, num_features)的numpy数组
+
+    返回：
+    - 填充NaN后的数据
     """
-    # 创建数据的副本，避免修改原始数据
-    data_filled = data.copy()
-
-    # 处理每个维度上的NaN，避免双重循环
-    for i in range(data_filled.shape[2]):  # 处理每个维度
-        # 沿着第一个维度（行）对所有列应用插值函数
-        def interpolate_row(row):
-            mask = ~np.isnan(row)
-            if np.sum(mask) > 1:
-                # 创建插值函数
-                interp_func = interp1d(np.where(mask)[0], row[mask], kind='linear', fill_value="extrapolate")
-                return interp_func(np.arange(len(row)))
-            return row  # 如果不能插值，则原样返回
-
-        # 使用 np.apply_along_axis 对每一行（window_size维度）应用插值操作
-        data_filled[:, :, i] = np.apply_along_axis(interpolate_row, axis=1, arr=data_filled[:, :, i])
-
+    num_stations, window_size, num_features = data.shape
+    # 将数据展平成二维数组，形状为(num_stations * num_features, window_size)
+    data_reshaped = data.reshape(num_stations * num_features, window_size)
+    # 创建缺失值掩码
+    nans = np.isnan(data_reshaped)
+    # 对于每一行（对应一个特征的时间序列），进行插值
+    for i in range(data_reshaped.shape[0]):
+        if not nans[i].all():
+            data_reshaped[i][nans[i]] = np.interp(
+                np.flatnonzero(nans[i]), np.flatnonzero(~nans[i]), data_reshaped[i][~nans[i]]
+            )
+        else:
+            # 如果整行都是NaN，用零替换
+            data_reshaped[i] = np.zeros(window_size)
+    # 恢复原始形状
+    data_filled = data_reshaped.reshape(num_stations, num_features, window_size)
+    data_filled = data_filled.transpose(0, 2, 1)  # 形状：(num_stations, window_size, num_features)
     return data_filled
 
-
-def convert_to_fixed_length_array(data, length=4):
-    return [np.array(x[:length] if isinstance(x, list) else [np.nan]*length) for x in data]
-
-def generate_time_bins(start_date, end_date, freq = 14):
+def generate_time_bins(start_date, end_date, freq=14):
     """
-    高效批量生成从第一天开始的以2周为间隔的时间窗口。
-    
+    高效批量生成以freq天为间隔的时间窗口。
+
     参数:
-        start_date (str): 开始日期，格式 'YYYY-MM-DD'，例如 '2001-01-01'。
-        end_date (str): 结束日期，格式 'YYYY-MM-DD'，例如 '2005-12-30'。
-    
+        start_date (str or pd.Timestamp): 开始日期。
+        end_date (str or pd.Timestamp): 结束日期。
+        freq (int): 间隔的天数。
+
     返回:
-        pd.DatetimeIndex: 以2周为间隔的时间窗口序列。
+        pd.DatetimeIndex: 以freq天为间隔的时间窗口序列。
     """
-    # 将输入的日期字符串转换为 Timestamp
-    start_date = pd.Timestamp(start_date)
-    end_date = pd.Timestamp(end_date)
-
-    total_days = (end_date - start_date).days
-    num_intervals = total_days // freq
-
-    time_bins = pd.DatetimeIndex([start_date + pd.Timedelta(days=14 * i) for i in range(num_intervals + 2)])
-
+    start_date = pd.to_datetime(start_date)
+    end_date = pd.to_datetime(end_date)
+    time_bins = pd.date_range(start=start_date, end=end_date + pd.Timedelta(days=freq), freq=f'{freq}D')
     return time_bins
 
-def calculate_energy_in_time_window(data,freq=14):
+def calculate_energy_in_time_window(data, freq=14):
     """
     计算在指定时间窗口内的能量。
-    
+
     参数:
         data (pd.DataFrame): 包含站点数据的DataFrame，行名为日期，列名为站点名。
-    
-    输出:
-        返回每个站点在每个时间窗口内的对数能量结果DataFrame。
+        freq (int): 时间窗口的间隔天数。
+
+    返回:
+        pd.DataFrame: 每个站点在每个时间窗口内的对数能量结果。
     """
     # 自动获取开始和结束日期
     start_date = data.index.min()
@@ -91,209 +314,110 @@ def calculate_energy_in_time_window(data,freq=14):
     time_bins = generate_time_bins(start_date, end_date, freq=freq)
 
     data = data.copy()
-    data['Time_bin'] = pd.cut(data.index, bins=time_bins, right=True)
+    # 将日期分配到时间窗口
+    data['Time_bin'] = pd.cut(data.index, bins=time_bins, right=False)
 
     numeric_cols = data.select_dtypes(include=[np.number]).columns
-    data[numeric_cols] = data[numeric_cols].where(data[numeric_cols] > 0).dropna(how='all')
-
-    grouped = data.groupby('Time_bin', observed=False).sum()
+    # 过滤掉非正数值
+    data[numeric_cols] = data[numeric_cols].where(data[numeric_cols] > 0)
+    # 按时间窗口分组并求和
+    grouped = data.groupby('Time_bin', observed=True)[numeric_cols].sum()
+    # 计算能量
     grouped_energy = 10 ** (1.5 * grouped)
-
+    # 计算对数能量
     log_energy = (1 / 1.5) * np.log10(grouped_energy.replace(0, np.nan))
-
+    # 填充NaN为0
     log_energy_filled = log_energy.fillna(0)
-
-    log_energy_filled.index = log_energy_filled.index.categories.left.strftime('%Y-%m-%d')
+    # 更新索引为时间窗口的开始日期
+    log_energy_filled.index = log_energy_filled.index.map(lambda x: x.left.strftime('%Y-%m-%d'))
 
     return log_energy_filled
 
 def find_first_earthquake(earthquake_catalog, threshold):
     """
-    优化后的版本，返回一个 (500, 1) 的向量，表示每个站点的第一个大于阈值的地震发生的天数（行数）。
+    返回每个站点的第一个大于阈值的地震发生的天数（行数）。
 
     参数:
     - earthquake_catalog (pd.DataFrame): 地震目录，每个值为地震震级，行名为日期。
-    - threshold (float): 震级阈值，筛选出大于此阈值的地震。
+    - threshold (float): 震级阈值。
 
     返回:
-    - result_vector (np.ndarray): 返回 (500, 1) 的向量，每个值表示第一个超过阈值的地震发生的行数（天数）。
+    - result_vector (np.ndarray): (num_stations, 1)的向量，表示第一个超过阈值的地震发生的行数。
     """
     earthquake_data = earthquake_catalog.to_numpy()
-
+    # 创建布尔矩阵，标记超过阈值的事件
     above_threshold = earthquake_data > threshold
-
+    # 初始化结果向量
     result_vector = np.zeros((earthquake_data.shape[1], 1))
-
+    # 找到第一个超过阈值的索引
     first_event_indices = np.argmax(above_threshold, axis=0)
-
+    # 检查是否有任何事件
     has_event = above_threshold.any(axis=0)
-    
+    # 更新结果向量
     result_vector[has_event, 0] = first_event_indices[has_event] + 1
 
     return result_vector
 
-
 def graph_laplacian_embedding(adj_matrix, k):
     """
-    Compute the graph Laplacian embedding using the k smallest non-trivial eigenvectors.
+    计算图的拉普拉斯嵌入。
 
-    Parameters:
-    adj_matrix (numpy.ndarray): Adjacency matrix of the graph.
-    k (int): Number of smallest non-trivial eigenvectors to select.
+    参数:
+    - adj_matrix (torch.Tensor): 图的邻接矩阵。
+    - k (int): 选择的特征向量数量。
 
-    Returns:
-    numpy.ndarray: Matrix of shape (N, k) representing the graph Laplacian embedding.
+    返回:
+    - torch.Tensor: 形状为(N, k)的嵌入矩阵。
     """
-    # Degree matrix
-    D = np.diag(np.sum(adj_matrix, axis=1))
-    
-    # Compute D^(-1/2)
-    D_inv_sqrt = np.linalg.inv(np.sqrt(D))
-    
-    # Normalized Laplacian: I - D^(-1/2) * A * D^(-1/2)
-    I = np.eye(adj_matrix.shape[0])
-    laplacian = I - D_inv_sqrt @ adj_matrix @ D_inv_sqrt
+    adj_matrix = adj_matrix.float()
+    N = adj_matrix.shape[0]
+    k = min(k, N - 1)
 
-    # Eigenvalue decomposition
-    eigenvalues, eigenvectors = eigh(laplacian)
-    
-    # Select the k smallest non-trivial eigenvectors (skip the first one)
-    # The first eigenvector corresponds to eigenvalue 0 (trivial solution).
+    # 计算度矩阵
+    degrees = torch.sum(adj_matrix, dim=1)
+    D_inv_sqrt = torch.diag(1.0 / torch.sqrt(degrees + 1e-8))
+    # 计算归一化的拉普拉斯矩阵
+    laplacian = torch.eye(N, device=adj_matrix.device) - D_inv_sqrt @ adj_matrix @ D_inv_sqrt
+    # 特征分解
+    eigenvalues, eigenvectors = torch.linalg.eigh(laplacian)
+    # 选择k个最小的非平凡特征向量
     selected_eigenvectors = eigenvectors[:, 1:k+1]
-    
-    return torch.tensor(selected_eigenvectors, dtype=torch.float32)
+
+    return selected_eigenvectors
 
 def generate_masks(es_geo_matrix, es_sem_matrix, gnss_geo_matrix, far_mask_delta, dtw_delta):
-    # Generate geo_mask
-    es_geo_matrix = es_geo_matrix.T
-    gnss_geo_matrix = gnss_geo_matrix.T
+    """
+    生成地理和语义掩码。
 
-    es_geo_matrix = torch.tensor(es_geo_matrix.values, dtype=torch.float32)
-    es_sem_matrix = torch.tensor(es_sem_matrix.values, dtype=torch.float32)
-    gnss_geo_matrix = torch.tensor(gnss_geo_matrix.values, dtype=torch.float32)
-    
+    参数:
+    - es_geo_matrix: 地震-站点的地理邻接矩阵。
+    - es_sem_matrix: 地震-站点的语义邻接矩阵。
+    - gnss_geo_matrix: GNSS邻接矩阵。
+    - far_mask_delta: 距离阈值。
+    - dtw_delta: DTW阈值。
+
+    返回:
+    - geo_mask: 地理掩码。
+    - sem_mask: 语义掩码。
+    - gnss_geo_mask: GNSS地理掩码。
+    """
+    es_geo_matrix = torch.tensor(es_geo_matrix.values.T, dtype=torch.float32)
+    es_sem_matrix = torch.tensor(es_sem_matrix.values.T, dtype=torch.float32)
+    gnss_geo_matrix = torch.tensor(gnss_geo_matrix.values.T, dtype=torch.float32)
+
     num_nodes = es_geo_matrix.shape[0]
     gnss_station_num = gnss_geo_matrix.shape[0]
-    geo_mask = torch.zeros(num_nodes, num_nodes)
-    geo_mask[(es_geo_matrix >= far_mask_delta)] = 1
-    geo_mask = geo_mask.bool()
-    
-    # Generate sem_mask
-    sem_mask = torch.ones(num_nodes, num_nodes)
-    sem_mask_indices = es_sem_matrix.argsort(axis=1)[:, :dtw_delta]
-    for i in range(sem_mask.shape[0]):
-        sem_mask[i][sem_mask_indices[i]] = 0
-    sem_mask = sem_mask.bool()
-    
-    # Generate gnss_geo_mask
-    
-    gnss_geo_mask = torch.zeros(gnss_station_num, gnss_station_num)
-    gnss_geo_mask[gnss_geo_matrix >= far_mask_delta] = 1
-    gnss_geo_mask = gnss_geo_mask.bool()
-    
+
+    # 生成geo_mask
+    geo_mask = es_geo_matrix >= far_mask_delta
+    # 生成sem_mask
+    sem_mask = torch.ones(num_nodes, num_nodes, dtype=torch.bool)
+    sem_mask_indices = es_sem_matrix.argsort(dim=1)[:, :dtw_delta]
+    sem_mask.scatter_(1, sem_mask_indices, False)
+    # 生成gnss_geo_mask
+    gnss_geo_mask = gnss_geo_matrix >= far_mask_delta
+
     return geo_mask, sem_mask, gnss_geo_mask
-
-import torch
-from torch.utils.data import Dataset
-import numpy as np
-
-class EarthquakeGNSSDataset(Dataset):
-    def __init__(self, 
-                 area,
-                 earthquake_data, gnss_data,
-                 es_geo_matrix, es_sem_matrix, gnss_geo_matrix,
-                 far_mask_delta, dtw_delta, lape_dim,
-                 window_size=14, forecast_horizon=14, earthquake_threshold=4.0):
-        """
-        Dataset class for the Earthquake-GNSS dataset.
-        earthquake_data: DataFrame containing earthquake data.
-        gnss_data: DataFrame containing GNSS data.
-        window_size: Size of the historical window.
-        forecast_horizon: Size of the future window.
-        earthquake_threshold: Threshold for earthquake magnitude.
-        es_geo_matrix: Earthquake-station adjacency matrix.
-        es_sem_matrix: Earthquake-station semantic adjacency matrix.
-        gnss_sem_matrix: GNSS semantic adjacency matrix.
-        far_mask_delta: Threshold for the far mask.
-        dtw_delta: Threshold for the DTW mask.
-        lape_dim: Number of dimensions for the graph Laplacian.
-        """
-        self.earthquake_data = earthquake_data
-        self.gnss_data = gnss_data
-        self.window_size = window_size
-        self.forecast_horizon = forecast_horizon
-        self.earthquake_threshold = earthquake_threshold
-        self.length = len(earthquake_data) - window_size - forecast_horizon + 1
-        self.node_ = len(earthquake_data)
-        self.area = area
-        self.es_geo_mask, self.es_sem_mask, self.gnss_geo_mask = generate_masks(es_geo_matrix, es_sem_matrix, gnss_geo_matrix, far_mask_delta, dtw_delta)
-        # Generate masks and store them in a dictionary
-        self.masks = {
-            'es_geo_mask': self.es_geo_mask.bool(),
-            'es_sem_mask': self.es_sem_mask.bool(),
-            'gnss_geo_mask': self.gnss_geo_mask.bool(),
-            'lap_ex': graph_laplacian_embedding(es_geo_matrix, lape_dim),
-            'lap_gnss': graph_laplacian_embedding(gnss_geo_matrix, lape_dim),
-        }
-    
-    def __len__(self):
-        return self.length
-
-    def __name__(self):
-        return self.area
-    
-    def __getitem__(self, idx):
-        # Get historical and future earthquake data
-        earthquake_data_history = self.earthquake_data.iloc[idx:idx + self.window_size]
-        earthquake_data_future = self.earthquake_data.iloc[idx + self.window_size:idx + self.window_size + self.forecast_horizon]
-
-        # Calculate log energy history and future
-        log_energy_history = np.array(calculate_energy_in_time_window(earthquake_data_history)).T
-        log_energy_future = np.array(calculate_energy_in_time_window(earthquake_data_future)).T
-
-        # Get the future earthquake data day threshold
-        earthquake_data_future_day = find_first_earthquake(earthquake_data_future, self.earthquake_threshold)
-
-        # Get the GNSS data history and process it
-        gnss_data_history = self.gnss_data.iloc[idx:idx + self.window_size].values
-        gnss_data_history = np.array([convert_to_fixed_length_array(row) for row in gnss_data_history.T])
-        gnss_data_history = fill_nan_with_interpolation(gnss_data_history)
-
-        # Convert data to tensors
-        log_energy_history = torch.tensor(log_energy_history, dtype=torch.float32).permute(1, 0).unsqueeze(-1)
-        log_energy_future = torch.tensor(log_energy_future, dtype=torch.float32)
-        gnss_data_history = torch.tensor(gnss_data_history, dtype=torch.float32).permute(1, 0, 2)
-        earthquake_data_future_day = torch.tensor(earthquake_data_future_day, dtype=torch.float32).squeeze(-1)
-
-        return {
-            'log_energy_history': log_energy_history,
-            'gnss_data_history': gnss_data_history,
-            'log_energy_future': log_energy_future,
-            'earthquake_data_future_day': earthquake_data_future_day
-        }
-    
-    def get_masks(self):
-        """
-        Retrieve the masks dictionary.
-        :return: A dictionary containing all the masks.
-        """
-        return self.masks
-
-    def collate_fn(self, batch):
-        """
-        Custom collate function to include masks in the batch.
-        
-        :param batch: List of data samples returned by the dataset's __getitem__ method.
-        :param dataset: The dataset object that contains the masks.
-        :return: A dictionary containing the batched data and the masks.
-        """
-        # Combine the batch data (list of dictionaries) into a single dictionary of tensors
-        batch_data = {key: torch.stack([item[key] for item in batch]) for key in batch[0]}
-        
-        # Add the masks to the batch data
-        batch_data['masks'] = self.get_masks()
-        
-        return batch_data
     
 
 class CombinedEarthquakeGNSSDataset(Dataset):

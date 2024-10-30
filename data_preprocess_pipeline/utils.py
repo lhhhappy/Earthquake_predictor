@@ -326,15 +326,10 @@ def construct_gnss_csv(directory, start_date, end_date, output_file, station_dic
                 # 将数据对齐到统一的日期范围
                 temp_df = temp_df.reindex(date_range)
 
-                # 检查是否有连续的缺失值
-                is_nan = has_consecutive_nans(temp_df[station_name])
-                if not is_nan:
-                    data_frames.append(temp_df)
-                    print(f"监测站 {station_name} 的数据已添加。")
-                    station_dict_fliter[station_name] = station_dict[station_name]
-                else:
-                    print(f"监测站 {station_name} 的数据不完整，已被忽略。")
-                    
+                data_frames.append(temp_df)
+                print(f"监测站 {station_name} 的数据已添加。")
+                station_dict_fliter[station_name] = station_dict[station_name]
+                
             except pd.errors.EmptyDataError:
                 print(f"文件 {station_file} 为空，已被忽略。")
                 continue

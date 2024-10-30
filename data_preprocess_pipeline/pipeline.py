@@ -4,13 +4,13 @@ import numpy as np
 import pandas as pd
 
 # 参数设置
-start_year = 2020
-end_year = 2023
-#
-area_dict = {"Japan": [35, 40, 138, 143],"California": [32, 37, -120, -115]}
-for area, [minlat, maxlat, minlon, maxlon] in area_dict.items():
-    save_path = "/data2/linhang_data/Earthquake_data/data/"+area
+start_year = 2000
+end_year = 2015
 
+#,"California": [32, 37, -120, -115]"Japan": [35, 40, 138, 143],
+area_dict = {"California": [32, 37, -120, -115]}
+for area, [minlat, maxlat, minlon, maxlon] in area_dict.items():
+    save_path = "/home/linhang/workbench/Earthquake_data/"+area
     topk = 100
     lat_step, lon_step = 0.1, 0.1
     distance_threshold = 100
@@ -21,7 +21,7 @@ for area, [minlat, maxlat, minlon, maxlon] in area_dict.items():
     end_date = pd.to_datetime(f'{end_year}-12-31')
 
     # 加载站点信息
-    station_dict_all = pickle.load(open('/data/linhang/workbench/Tipping_points_predictor/station_dict_all.pkl', 'rb'))
+    station_dict_all = pickle.load(open('data_preprocess_pipeline/station_dict_all.pkl', 'rb'))
 
     #修正 get_use_station_dict 函数定义中的参数顺序
     def get_use_station_dict(station_dict_all, minlatitude, maxlatitude, minlongitude, maxlongitude):
@@ -43,7 +43,7 @@ for area, [minlat, maxlat, minlon, maxlon] in area_dict.items():
     print(f"使用的站点数量: {len(station_names)}")
     pickle.dump(station_dict_use, open(save_path+'/station_dict_use.pkl', 'wb'))
 
-    # # 下载地震数据和GNSS数据
+    # 下载地震数据和GNSS数据
     download_earthquake_data(start_year, end_year, minlat, maxlat, minlon, maxlon, save_path+"/usgs_data_year")
     print("地震数据下载完成")
     download_GNSS_data(station_names, save_path+"/GNSS_day")
@@ -86,6 +86,7 @@ for area, [minlat, maxlat, minlon, maxlon] in area_dict.items():
     )
     print("能量数据CSV构建完成")
     # 构建GNSS数据CSV
+
     station_dict_fliter =  construct_gnss_csv(
                                 directory=save_path+'/GNSS_day',
                                 start_date=start_date,
@@ -94,6 +95,7 @@ for area, [minlat, maxlat, minlon, maxlon] in area_dict.items():
                                 station_dict=station_dict_use
                             )
     print("GNSS数据CSV构建完成")
+
     # 生成地震网格的邻接矩阵
 
     generate_grid_aij(
