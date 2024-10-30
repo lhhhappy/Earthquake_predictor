@@ -1,5 +1,3 @@
-<p align="center">
-  <img src="LLM" width="60%" alt="EARTHQUAKE_PREDICTOR.GIT-logo">
 </p>
 <p align="center">
     <h1 align="center">EARTHQUAKE_PREDICTOR.GIT</h1>
