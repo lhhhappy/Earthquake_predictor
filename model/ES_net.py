@@ -64,6 +64,7 @@ class LaplacianPE(nn.Module):
         # lap_mx: (batch_size, N, lape_dim)
         lap_pos_enc = self.embedding_lap_pos_enc(lap_mx)  # (batch_size, N, embed_dim)
         lap_pos_enc = lap_pos_enc.unsqueeze(1)  # (batch_size, 1, N, embed_dim)
+        print(lap_pos_enc.shape)
         return lap_pos_enc
 
 class DataEmbedding(nn.Module):
@@ -190,7 +191,7 @@ class STSelfAttention(nn.Module):
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
 
-    def forward(self, x, geo_mask=None, sem_mask=None):
+    def forward(self, x, geo_mask=None, sem_mask=None, padding_mask=None):
         B, T, N, D = x.shape
 
         # Temporal block
@@ -220,6 +221,12 @@ class STSelfAttention(nn.Module):
                 geo_mask = geo_mask.bool()
                 geo_attn = geo_attn.masked_fill(geo_mask, float('-inf'))
             geo_attn = geo_attn.softmax(dim=-1)
+            if padding_mask is not None:
+                # Adjust padding_mask to shape (B, 1, 1, N, N) to broadcast over T and geo_num_heads
+                padding_mask = padding_mask.unsqueeze(1).unsqueeze(2)
+                padding_mask = padding_mask.bool()
+                geo_attn = geo_attn.masked_fill(padding_mask, 0)
+
             geo_attn = self.geo_attn_drop(geo_attn)
             geo_x = (geo_attn @ geo_v).transpose(2, 3).reshape(B, T, N, int(D * self.geo_ratio))
         else:
@@ -240,6 +247,11 @@ class STSelfAttention(nn.Module):
                 sem_mask = sem_mask.bool()
                 sem_attn = sem_attn.masked_fill(sem_mask, float('-inf'))
             sem_attn = sem_attn.softmax(dim=-1)
+            if padding_mask is not None:
+                # Adjust padding_mask to shape (B, 1, 1, N, N) to broadcast over T and geo_num_heads
+                padding_mask = padding_mask.unsqueeze(1).unsqueeze(2)
+                padding_mask = padding_mask.bool()
+                geo_attn = geo_attn.masked_fill(padding_mask, 0)
             sem_attn = self.sem_attn_drop(sem_attn)
             sem_x = (sem_attn @ sem_v).transpose(2, 3).reshape(B, T, N, int(D * self.sem_ratio))
         else:
@@ -268,12 +280,12 @@ class STEncoderBlock(nn.Module):
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
 
-    def forward(self, x, geo_mask=None, sem_mask=None):
+    def forward(self, x, geo_mask=None, sem_mask=None, padding_mask = None):
         if self.type_ln == 'pre':
-            x = x + self.drop_path(self.st_attn(self.norm1(x), geo_mask=geo_mask, sem_mask=sem_mask))
+            x = x + self.drop_path(self.st_attn(self.norm1(x), geo_mask=geo_mask, sem_mask=sem_mask, padding_mask = padding_mask))
             x = x + self.drop_path(self.mlp(self.norm2(x)))
         elif self.type_ln == 'post':
-            x = self.norm1(x + self.drop_path(self.st_attn(x, geo_mask=geo_mask, sem_mask=sem_mask)))
+            x = self.norm1(x + self.drop_path(self.st_attn(x, geo_mask=geo_mask, sem_mask=sem_mask, padding_mask = padding_mask)))
             x = self.norm2(x + self.drop_path(self.mlp(x)))
         return x
 
@@ -395,7 +407,7 @@ class ES_net(nn.Module):
                  sem_num_heads=2, t_num_heads=2, mlp_ratio=4, qkv_bias=True, drop=0.,
                  attn_drop=0., drop_path=0.3, s_attn_size=3, t_attn_size=3, enc_depth=6,
                  type_ln="pre", output_dim=1, input_window=12,
-                 output_window=1, predict_day_class=14,
+                 output_window=1, predict_day_class=15,
                  far_mask_delta=0, dtw_delta=0):
 
         super().__init__()
@@ -473,15 +485,14 @@ class ES_net(nn.Module):
             in_channels=self.skip_dim, out_channels=self.output_dim, kernel_size=1, bias=True,
         )
 
-        self.day2week = PatchMapping(self.predict_day_class)
+        self.day2week = PatchMapping(self.predict_day_class-1)
 
         self.cross_attn = CrossAttention(self.skip_dim, self.skip_dim, self.skip_dim)
 
         self.day_deocder = TemporalConvDecoder(self.skip_dim, num_layers=2, output_dim=self.predict_day_class)
 
-    def forward(self, x, gnss, lap_mx=None, gnss_lap_mx=None, es_geo_mask=None, es_sem_mask=None, gnss_geo_mask=None):
+    def forward(self, x, gnss, lap_mx=None, gnss_lap_mx=None, es_geo_mask=None, es_sem_mask=None, gnss_geo_mask=None, gnss_padding_mask=None):
         T = x.shape[1]
-
         enc = self.enc_embed_layer(x, lap_mx)
 
         gnss_enc = self.gnss_embed_layer(gnss, gnss_lap_mx)
@@ -493,7 +504,7 @@ class ES_net(nn.Module):
 
         skip_gnss = 0
         for i, encoder_block in enumerate(self.encoder_blocks_gnss):
-            gnss_enc = encoder_block(gnss_enc, gnss_geo_mask)
+            gnss_enc = encoder_block(gnss_enc, gnss_geo_mask, padding_mask = gnss_padding_mask)
             skip_gnss += self.skip_convs_gnss[i](gnss_enc.permute(0, 3, 2, 1))
 
         skip_earthquake = skip_earthquake.permute(0, 3, 2, 1)
@@ -502,7 +513,6 @@ class ES_net(nn.Module):
         skip_gnss_week = self.day2week(skip_gnss_day)
 
         ENC_ST = self.cross_attn(skip_earthquake, skip_gnss_week) + skip_earthquake
-        print(ENC_ST.shape)
         energy_predict = self.es_conv1(F.relu(ENC_ST))
         energy_predict = self.es_conv2(F.relu(energy_predict.permute(0, 3, 2, 1))).permute(0, 3, 2, 1).squeeze(1)
 

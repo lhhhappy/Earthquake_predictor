@@ -28,8 +28,8 @@ class EarthquakeGNSSDataset(Dataset):
                  earthquake_data, gnss_data,
                  es_geo_matrix, es_sem_matrix, gnss_geo_matrix,
                  far_mask_delta, dtw_delta, lape_dim,
-                 window_size=14, forecast_horizon=14, earthquake_threshold=4.0,
-                 missing_threshold=5):
+                 window_size=14, forecast_horizon=14, time_resolution = 14,
+                 earthquake_threshold=4.0, missing_threshold=5):
         """
         地震-GNSS数据集的自定义Dataset类。
 
@@ -56,6 +56,7 @@ class EarthquakeGNSSDataset(Dataset):
         self.earthquake_threshold = earthquake_threshold
         self.missing_threshold = missing_threshold
         self.lape_dim = lape_dim
+        self.time_resolution = time_resolution
 
         # 计算数据集的长度
         self.length = len(earthquake_data) - window_size - forecast_horizon + 1
@@ -83,8 +84,8 @@ class EarthquakeGNSSDataset(Dataset):
         earthquake_happen = torch.tensor((earthquake_data_future >= self.earthquake_threshold).any(axis=0).to_numpy(), dtype=torch.bool)
 
         # 计算历史和未来的对数能量
-        log_energy_history = calculate_energy_in_time_window(earthquake_data_history).values.T
-        log_energy_future = calculate_energy_in_time_window(earthquake_data_future).values.T
+        log_energy_history = calculate_energy_in_time_window(earthquake_data_history,self.time_resolution).values.T
+        log_energy_future = calculate_energy_in_time_window(earthquake_data_future,self.time_resolution).values.T
 
         # 获取未来地震事件发生的天数
         earthquake_data_future_day = find_first_earthquake(
@@ -129,7 +130,7 @@ class EarthquakeGNSSDataset(Dataset):
 
         return {
             'log_energy_history': log_energy_history,
-            'gnss_data_history': gnss_data_history,
+            'gnss_data_history': gnss_data_history.permute(1, 0, 2),
             'log_energy_future': log_energy_future,
             'earthquake_data_future_day': earthquake_data_future_day,
             'es_geo_mask': self.es_geo_mask,
@@ -222,7 +223,7 @@ def fill_nan_with_interpolation(data):
     data_reshaped = data.reshape(num_stations * num_features, window_size)
     # 创建缺失值掩码
     nans = np.isnan(data_reshaped)
-    # 对于每一行（对应一个特征的时间序列），进行插值
+    # 对于每一行（对应一个特征的时间序列），进行��值
     for i in range(data_reshaped.shape[0]):
         if not nans[i].all():
             data_reshaped[i][nans[i]] = np.interp(
@@ -236,30 +237,30 @@ def fill_nan_with_interpolation(data):
     data_filled = data_filled.transpose(0, 2, 1)  # 形状：(num_stations, window_size, num_features)
     return data_filled
 
-def generate_time_bins(start_date, end_date, freq=14):
+def generate_time_bins(start_date, end_date, time_resolution=14):
     """
-    高效批量生成以freq天为间隔的时间窗口。
+    高效批量生成以time_resolution天为间隔的时间窗口。
 
     参数:
         start_date (str or pd.Timestamp): 开始日期。
         end_date (str or pd.Timestamp): 结束日期。
-        freq (int): 间隔的天数。
+        time_resolution (int): 间隔的天数。
 
     返回:
-        pd.DatetimeIndex: 以freq天为间隔的时间窗口序列。
+        pd.DatetimeIndex: 以time_resolution天为间隔的时间窗口序列。
     """
     start_date = pd.to_datetime(start_date)
     end_date = pd.to_datetime(end_date)
-    time_bins = pd.date_range(start=start_date, end=end_date + pd.Timedelta(days=freq), freq=f'{freq}D')
+    time_bins = pd.date_range(start=start_date, end=end_date + pd.Timedelta(days=time_resolution), freq=f'{time_resolution}D')
     return time_bins
 
-def calculate_energy_in_time_window(data, freq=14):
+def calculate_energy_in_time_window(data, time_resolution=14):
     """
     计算在指定时间窗口内的能量。
 
     参数:
         data (pd.DataFrame): 包含站点数据的DataFrame，行名为日期，列名为站点名。
-        freq (int): 时间窗口的间隔天数。
+        time_resolution (int): 时间窗口的间隔天数。
 
     返回:
         pd.DataFrame: 每个站点在每个时间窗口内的对数能量结果。
@@ -268,7 +269,7 @@ def calculate_energy_in_time_window(data, freq=14):
     start_date = data.index.min()
     end_date = data.index.max()
 
-    time_bins = generate_time_bins(start_date, end_date, freq=freq)
+    time_bins = generate_time_bins(start_date, end_date, time_resolution=time_resolution)
 
     data = data.copy()
     # 将日期分配到时间窗口
@@ -281,7 +282,7 @@ def calculate_energy_in_time_window(data, freq=14):
     grouped = data.groupby('Time_bin', observed=True)[numeric_cols].sum()
     # 计算能量
     grouped_energy = 10 ** (1.5 * grouped)
-    # 计算对数能量
+    # 计算对数能���
     log_energy = (1 / 1.5) * np.log10(grouped_energy.replace(0, np.nan))
     # 填充NaN为0
     log_energy_filled = log_energy.fillna(0)
@@ -296,7 +297,7 @@ def find_first_earthquake(earthquake_catalog, threshold):
 
     参数:
     - earthquake_catalog (pd.DataFrame): 地震目录，每个值为地震震级，行名为日期。
-    - threshold (float): 震级阈值。
+    - threshold (float): 震级��值。
 
     返回:
     - result_vector (np.ndarray): (num_stations, 1)的向量，表示第一个超过阈值的地震发生的行数。
@@ -391,7 +392,7 @@ class CombinedEarthquakeGNSSDataset(Dataset):
         self.lengths = {region: len(ds) for region, ds in region_datasets.items()}
         # 计算总长度
         self.total_length = sum(self.lengths.values())
-
+        self.lape_dim = region_datasets[self.region_names[0]].lape_dim
     def __len__(self):
         return self.total_length
 
@@ -417,8 +418,7 @@ class CombinedEarthquakeGNSSDataset(Dataset):
         - 一个包含组合批次数据和区域特定掩码的字典。
         """
         # 动态计算此批次中 GNSS 节点的最大数量
-        max_gnss_nodes_in_batch = max(item['gnss_data_history'].shape[0] for item in batch)
-        max_lape_dim_in_batch = max(item['lap_gnss'].shape[1] for item in batch)
+        max_gnss_nodes_in_batch = max(item['gnss_data_history'].shape[1] for item in batch)
         # 初始化列表以存储填充后的数据和掩码
         log_energy_history_list = []
         gnss_data_history_list = []
@@ -431,18 +431,22 @@ class CombinedEarthquakeGNSSDataset(Dataset):
         lap_gnss_list = []
         earthquake_happen_list = []
         # 遍历批次中的每个样本，填充 GNSS 数据和掩码以匹配最大节点数
+        gnss_padding_mask_list = []
         for item in batch:
-            num_gnss_nodes = item['gnss_data_history'].shape[0]
+
+            gnss_padding_mask = torch.ones(max_gnss_nodes_in_batch, max_gnss_nodes_in_batch, dtype=torch.bool)
+            num_gnss_nodes = item['gnss_data_history'].shape[1]
             pad_gnss_nodes = max_gnss_nodes_in_batch - num_gnss_nodes
-            
+            gnss_padding_mask[:num_gnss_nodes, :num_gnss_nodes] = False
+
             # 填充 gnss_data_history，在节点维度（第一个维度）进行填充
             padded_gnss_data = F.pad(
                 item['gnss_data_history'],
-                pad=(0, 0, 0, 0, 0, pad_gnss_nodes),  # (feature_dim_pad, window_size_pad, node_dim_pad)
+                pad=(0, 0, 0, pad_gnss_nodes, 0, 0),  # (window_size, num_stations, num_features)
                 mode='constant',
                 value=0
             )
-
+            
             # 追加数据
             log_energy_history_list.append(item['log_energy_history'])
             gnss_data_history_list.append(padded_gnss_data)
@@ -466,7 +470,7 @@ class CombinedEarthquakeGNSSDataset(Dataset):
             lap_gnss = item['lap_gnss']
             padded_lap_gnss = F.pad(
                 lap_gnss,
-                pad=(0, max_lape_dim_in_batch - lap_gnss.shape[1], 0, pad_gnss_nodes),
+                pad=(0, self.lape_dim - lap_gnss.shape[1], 0, pad_gnss_nodes),
                 mode='constant',
                 value=0
             )
@@ -488,6 +492,7 @@ class CombinedEarthquakeGNSSDataset(Dataset):
             lap_ex_list.append(lap_ex)
             lap_gnss_list.append(padded_lap_gnss)
             earthquake_happen_list.append(item['earthquake_happen'])
+            gnss_padding_mask_list.append(gnss_padding_mask)
 
         # 将数据堆叠，创建批次张量
         
@@ -503,6 +508,7 @@ class CombinedEarthquakeGNSSDataset(Dataset):
         lap_ex = torch.stack(lap_ex_list)
         lap_gnss = torch.stack(lap_gnss_list)
         earthquake_happen = torch.stack(earthquake_happen_list)
+        gnss_padding_mask = torch.stack(gnss_padding_mask_list)
 
         # 组合成字典
         batch_data = {
@@ -515,13 +521,15 @@ class CombinedEarthquakeGNSSDataset(Dataset):
             'gnss_geo_mask': gnss_geo_masks,
             'lap_ex': lap_ex,
             'lap_gnss': lap_gnss,
-            'earthquake_happen':earthquake_happen
+            'earthquake_happen':earthquake_happen,
+            'gnss_padding_mask': gnss_padding_mask
+
 
         }
 
         return batch_data
 
-def get_dataset(data_dir,window_size,forecast_horizon,lape_dim,far_mask_delta,dtw_delta):
+def get_dataset(data_dir,window_size,forecast_horizon,lape_dim,far_mask_delta,dtw_delta,time_resolution):
     """
     Load the dataset from the specified directory.
     data_dir: Path to the directory containing the dataset files.
@@ -535,11 +543,8 @@ def get_dataset(data_dir,window_size,forecast_horizon,lape_dim,far_mask_delta,dt
     dataset_dict = {}
     for area in area_list:
         data_path = data_dir+area+"/"
-        gnss_data = pd.read_csv(data_path+"gnss_data.csv", index_col=0, parse_dates=True).map(parse_str_list)
+        gnss_data = pd.read_csv(data_path + "gnss_data.csv", index_col=0, parse_dates=True, low_memory=False).map(parse_str_list)
         earthquake_data = pd.read_csv(data_path+"earthquake_data.csv", index_col=0, parse_dates=True)
-        energy_data = pd.read_csv(data_path+"energy_data.csv", index_col=0, parse_dates=True)
-        station_dict_use = pickle.load(open(data_path+"station_dict_use.pkl", "rb"))
-
         es_geo_matrix = pd.read_csv(data_path+"es_geo_matrix.csv", index_col=0)
         es_sem_matrix = pd.read_csv(data_path+"es_sem_matrix.csv", index_col=0)
         gnss_geo_matrix = pd.read_csv(data_path+"gnss_geo_matrix.csv", index_col=0)
@@ -547,6 +552,6 @@ def get_dataset(data_dir,window_size,forecast_horizon,lape_dim,far_mask_delta,dt
                                                     earthquake_data=earthquake_data,es_geo_matrix=es_geo_matrix,es_sem_matrix=es_sem_matrix,
                                                     gnss_geo_matrix=gnss_geo_matrix,gnss_data=gnss_data,far_mask_delta=far_mask_delta,
                                                     dtw_delta=dtw_delta,lape_dim=lape_dim,
-                                                    window_size=window_size,forecast_horizon=forecast_horizon,earthquake_threshold=4)
+                                                    window_size=window_size,forecast_horizon=forecast_horizon,earthquake_threshold=4,time_resolution=time_resolution)
     dataset = CombinedEarthquakeGNSSDataset(dataset_dict)
     return dataset

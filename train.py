@@ -13,6 +13,9 @@ from lightning.pytorch.callbacks import LearningRateMonitor
 from model import LightingModel
 from dataset import get_dataset
 from loss import get_loss
+import lightning
+
+
 
 parser = ArgumentParser()
 
@@ -28,22 +31,26 @@ parser.add_argument("--max-epochs", type=int, default=100, help='Maximum number 
 parser.add_argument("--device", type=int, default=0, help='Device index for training')
 parser.add_argument("--lr", type=float, default=1e-4, help='Learning rate')
 parser.add_argument("--model_params", type=str, default="{}", help='JSON string for model parameters')
-parser.add_argument("--window-size", type=int, default=14*100, help='Window size for input data')
-parser.add_argument("--forecast-horizon", type=int, default=14, help='Forecast horizon')
+parser.add_argument("--history-window", type=int, default=14*100, help='Window size for input data')
+parser.add_argument("--forecast-window", type=int, default=14, help='Forecast horizon')
 parser.add_argument("--lape-dim", type=int, default=30, help='Dimensionality for Laplacian embedding')
 parser.add_argument("--far-mask-delta", type=int, default=30, help='Delta value for far masks')
 parser.add_argument("--dtw-delta", type=int, default=10, help='Delta value for DTW masks')
-
+parser.add_argument("--time-resolution", type=int, default=1, help='Time resolution for the dataset')
+parser.add_argument("--seed", type=int, default=42, help='Seed for reproducibility')
 args = parser.parse_args()
 
 # Load dataset
+lightning.seed_everything(args.seed)
+
 dataset = get_dataset(
     data_dir=args.data_path,
-    window_size=args.window_size,
-    forecast_horizon=args.forecast_horizon,
+    window_size=args.history_window,
+    forecast_horizon=args.forecast_window,
     lape_dim=args.lape_dim,
     far_mask_delta=args.far_mask_delta,
-    dtw_delta=args.dtw_delta
+    dtw_delta=args.dtw_delta,
+    time_resolution=args.time_resolution
 )
 
 # Define loss function
@@ -56,10 +63,10 @@ train_dataset, val_dataset = torch.utils.data.random_split(
 
 # Create DataLoaders for training and validation
 train_loader = DataLoader(
-    train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=dataset.collate_fn
+    train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=dataset.collate_fn,num_workers=127
 )
 val_loader = DataLoader(
-    val_dataset, batch_size=args.val_batch_size, shuffle=False, collate_fn=dataset.collate_fn
+    val_dataset, batch_size=args.val_batch_size, shuffle=False, collate_fn=dataset.collate_fn,num_workers=127
 )
 
 # Load model parameters from JSON string
@@ -103,8 +110,13 @@ trainer = Trainer(
     devices=[args.device],
     logger=pl_loggers.TensorBoardLogger(args.log_dir),
     callbacks=[checkpoint_callback, lr_monitor],
-    log_every_n_steps=20
+    log_every_n_steps=20,
 )
 
 # Start training
 trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
+
+if __name__ == "__main__":
+    print("Script started")
+    # 调用主要函数或逻辑
+    print("Script ended")

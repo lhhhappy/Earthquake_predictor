@@ -35,10 +35,10 @@ class LightingModel(L.LightningModule):
         earthquake_data_future_day = batch['earthquake_data_future_day']
         es_geo_masks = batch['es_geo_mask']
         es_sem_masks = batch['es_sem_mask']
-        combined_gnss_masks = batch['combined_gnss_mask']
+        combined_gnss_masks = batch['gnss_geo_mask']
         lap_ex_masks = batch['lap_ex']  
         lap_gnss_masks = batch['lap_gnss']
-        
+        gnss_paddding_mask = batch['gnss_padding_mask']
         # Forward pass through the model
         energy_predict, day_predict = self.model(
             log_energy_history, 
@@ -47,7 +47,8 @@ class LightingModel(L.LightningModule):
             gnss_lap_mx=lap_gnss_masks,
             es_geo_mask=es_geo_masks,
             es_sem_mask=es_sem_masks,
-            gnss_geo_mask=combined_gnss_masks
+            gnss_geo_mask=combined_gnss_masks,
+            gnss_padding_mask=gnss_paddding_mask
         )
         
         # Compute the loss using the helper function
@@ -66,9 +67,10 @@ class LightingModel(L.LightningModule):
         earthquake_data_future_day = batch['earthquake_data_future_day']
         es_geo_masks = batch['es_geo_mask']
         es_sem_masks = batch['es_sem_mask']
-        combined_gnss_masks = batch['combined_gnss_mask']
+        combined_gnss_masks = batch['gnss_geo_mask']
         lap_ex_masks = batch['lap_ex']  
         lap_gnss_masks = batch['lap_gnss']
+        gnss_paddding_mask = batch['gnss_padding_mask']
         
         # Forward pass through the model
         energy_predict, day_predict = self.model(
@@ -78,7 +80,8 @@ class LightingModel(L.LightningModule):
             gnss_lap_mx=lap_gnss_masks,
             es_geo_mask=es_geo_masks,
             es_sem_mask=es_sem_masks,
-            gnss_geo_mask=combined_gnss_masks
+            gnss_geo_mask=combined_gnss_masks,
+            gnss_padding_mask=gnss_paddding_mask,
         )
         
         # Compute the loss using the helper function

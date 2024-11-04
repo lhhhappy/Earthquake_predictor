@@ -7,8 +7,24 @@ import pandas as pd
 start_year = 2000
 end_year = 2015
 
-#,"California": [32, 37, -120, -115]"Japan": [35, 40, 138, 143],
-area_dict = {"California": [32, 37, -120, -115]}
+#latmin, latmax, lonmin, lonmax
+
+"""
+    "Japan (Honshu region)": [35, 40, 137, 143],  # 日本本州中北部
+    "California (Southern)": [32, 37, -120, -115],  # 加州南部区域
+"""
+
+area_dict = {
+    "Eastern Mediterranean (Europe)": [34, 42, 20, 35],  # 地中海东部，包括希腊、土耳其等地
+    "Alps Region (Europe)": [44, 48, 5, 15],  # 欧洲阿尔卑斯山区
+    "South Africa (SANSN coverage)": [-35, -22, 16, 32],  # 南非南部覆盖的地震监测区域
+    "New Zealand": [-45, -35, 165, 180],  # 新西兰地震活跃带
+    "Chile (South America)": [-30, -20, -75, -65],  # 智利北部沿海
+    "Turkey (Anatolian Fault Zone)": [36, 41, 26, 42],  # 土耳其安纳托利亚断层带
+    "Philippines (Luzon)": [12, 18, 120, 126],  # 菲律宾吕宋岛
+    "Indonesia (Sumatra)": [0, 5, 95, 105]  # 印尼苏门答腊区域
+}
+
 for area, [minlat, maxlat, minlon, maxlon] in area_dict.items():
     save_path = "/home/linhang/workbench/Earthquake_data/"+area
     topk = 100
@@ -41,6 +57,9 @@ for area, [minlat, maxlat, minlon, maxlon] in area_dict.items():
     )
     station_names = list(station_dict_use.keys())
     print(f"使用的站点数量: {len(station_names)}")
+    if len(station_names) <= 50:
+        print("该区域站点数量过少，跳过")
+        continue
     pickle.dump(station_dict_use, open(save_path+'/station_dict_use.pkl', 'wb'))
 
     # 下载地震数据和GNSS数据

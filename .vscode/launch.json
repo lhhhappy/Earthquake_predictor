@@ -1,0 +1,31 @@
+{
+    "version": "0.2.0",
+    "configurations": [ 
+        {
+            "name": "Earthquake Predictor Debug",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/home/linhang/workbench/workbench/Earthquake_predictor/train.py",
+            "args": [
+                "--data-path", "/home/linhang/workbench/Earthquake_data/",
+                "--model-arch", "ES_net",
+                "--energy-loss", "nnse",
+                "--day-loss", "cross_entropy",
+                "--batch-size", "1",
+                "--val-batch-size", "1",
+                "--max-epochs", "100",
+                "--device", "2",
+                "--lr", "1e-8",
+                "--save-dir", "/home/linhang/workbench/workbench/Earthquake_predictor/Results/",
+                "--log-dir", "/home/linhang/workbench/workbench/Earthquake_predictor/Results/debug_logs/",
+                "--model_params", "./model_params.json",
+                "--history-window", "1400",
+                "--forecast-window", "14",
+                "--lape-dim", "30",
+                "--far-mask-delta", "30",
+                "--dtw-delta", "10",
+                "--time-resolution", "14"
+            ]
+        }
+    ]
+}

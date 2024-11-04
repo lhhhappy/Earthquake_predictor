@@ -54,12 +54,32 @@ class NNSELoss(nn.Module):
 
         return nnse
 
+class MSELoss(nn.Module):
+    def __init__(self):
+        super(MSELoss, self).__init__()
+
+    def forward(self, predictions, targets):
+        """
+        Compute the Mean Squared Error (MSE) loss.
+
+        Parameters:
+        predictions (torch.Tensor): Predicted values (P_i).
+        targets (torch.Tensor): Observed values (O_i).
+
+        Returns:
+        torch.Tensor: Computed MSE loss.
+        """
+        # Compute MSE
+        mse = torch.mean((predictions - targets) ** 2)
+
+        return mse
+
 
 class CustomCrossEntropyLoss(nn.Module):
     """
     Cross-entropy loss for a three-class classification task.
     """
-    def __init__(self,predict_day_class=14):#fix the predict_day_class
+    def __init__(self,predict_day_class=15):#fix the predict_day_class
         super(CustomCrossEntropyLoss, self).__init__()
         # Initialize the cross-entropy loss function
         self.criterion = nn.CrossEntropyLoss()
@@ -81,8 +101,9 @@ class CustomCrossEntropyLoss(nn.Module):
         
         # Compute cross-entropy loss
         loss = self.criterion(logits, targets.long())
-        
+
         return loss
+    
 def get_loss(energy_loss='nse', day_loss='cross_entropy'):
     """
     Get the loss function based on the loss name.
@@ -98,6 +119,8 @@ def get_loss(energy_loss='nse', day_loss='cross_entropy'):
         loss_fns['energy_loss'] = NSELoss()
     elif energy_loss == 'nnse':
         loss_fns['energy_loss'] = NNSELoss()
+    elif energy_loss == 'mse':
+        loss_fns['energy_loss'] = MSELoss()
     else:
         raise ValueError(f"Unknown energy loss function: {energy_loss}")
     if day_loss == 'cross_entropy':
