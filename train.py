@@ -14,7 +14,8 @@ from model import LightingModel
 from dataset import get_dataset
 from loss import get_loss
 import lightning
-
+import torch.multiprocessing
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 
 parser = ArgumentParser()
@@ -34,8 +35,8 @@ parser.add_argument("--model_params", type=str, default="{}", help='JSON string 
 parser.add_argument("--history-window", type=int, default=14*100, help='Window size for input data')
 parser.add_argument("--forecast-window", type=int, default=14, help='Forecast horizon')
 parser.add_argument("--lape-dim", type=int, default=30, help='Dimensionality for Laplacian embedding')
-parser.add_argument("--far-mask-delta", type=int, default=30, help='Delta value for far masks')
-parser.add_argument("--dtw-delta", type=int, default=10, help='Delta value for DTW masks')
+parser.add_argument("--geo-percentage", type=float, default=0.5, help='Percentage of geo features')
+parser.add_argument("--sem-percentage", type=float, default=0.5, help='Percentage of semantic features')
 parser.add_argument("--time-resolution", type=int, default=1, help='Time resolution for the dataset')
 parser.add_argument("--seed", type=int, default=42, help='Seed for reproducibility')
 args = parser.parse_args()
@@ -48,8 +49,8 @@ dataset = get_dataset(
     window_size=args.history_window,
     forecast_horizon=args.forecast_window,
     lape_dim=args.lape_dim,
-    far_mask_delta=args.far_mask_delta,
-    dtw_delta=args.dtw_delta,
+    geo_percentage=args.geo_percentage,
+    sem_percentage=args.sem_percentage,
     time_resolution=args.time_resolution
 )
 
@@ -115,8 +116,3 @@ trainer = Trainer(
 
 # Start training
 trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
-
-if __name__ == "__main__":
-    print("Script started")
-    # 调用主要函数或逻辑
-    print("Script ended")

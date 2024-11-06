@@ -9,7 +9,7 @@ LOG_DIR="${SAVE_DIR}logs/"
 
 predict_window=14
 time_resolution=14
-history_window=140
+history_window=720
 
 input_window=$((history_window / time_resolution))
 output_window=$((predict_window / time_resolution))
@@ -54,13 +54,13 @@ python train.py \
     --val-batch-size 10 \
     --max-epochs 100 \
     --device 2 \
-    --lr 1e-8 \
+    --lr 1e-4 \
     --save-dir $SAVE_DIR \
     --log-dir $LOG_DIR \
     --model_params "model_params.json" \
     --history-window $history_window \
     --forecast-window  $predict_window \
     --lape-dim 30 \
-    --far-mask-delta 30 \
-    --dtw-delta 10 \
+    --geo-percentage 0.3 \
+    --sem-percentage 0.3 \
     --time-resolution $time_resolution

@@ -9,9 +9,9 @@ far_mask_delta: 0
 feature_dim: 1
 geo_num_heads: 2
 gnss_feature_dim: 4
-input_window: 10
+input_window: 51
 lape_dim: 30
-lr: 1.0e-08
+lr: 0.0001
 max_epoch: 100
 mlp_ratio: 2
 model: !!python/name:model.ES_net.ES_net ''

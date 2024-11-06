@@ -27,7 +27,7 @@ class EarthquakeGNSSDataset(Dataset):
                  area,
                  earthquake_data, gnss_data,
                  es_geo_matrix, es_sem_matrix, gnss_geo_matrix,
-                 far_mask_delta, dtw_delta, lape_dim,
+                 geo_percentage, sem_percentage, lape_dim,
                  window_size=14, forecast_horizon=14, time_resolution = 14,
                  earthquake_threshold=4.0, missing_threshold=5):
         """
@@ -63,7 +63,7 @@ class EarthquakeGNSSDataset(Dataset):
 
         # 生成掩码
         self.es_geo_mask, self.es_sem_mask, self.gnss_geo_mask = generate_masks(
-            es_geo_matrix, es_sem_matrix, gnss_geo_matrix, far_mask_delta, dtw_delta
+            es_geo_matrix, es_sem_matrix, gnss_geo_matrix, geo_percentage, sem_percentage
         )
         # 计算地震站点的图拉普拉斯嵌入
         self.lap_ex = graph_laplacian_embedding(torch.tensor(es_geo_matrix.values), lape_dim)
@@ -276,16 +276,21 @@ def calculate_energy_in_time_window(data, time_resolution=14):
     data['Time_bin'] = pd.cut(data.index, bins=time_bins, right=False)
 
     numeric_cols = data.select_dtypes(include=[np.number]).columns
-    # 过滤掉非正数值
+
     data[numeric_cols] = data[numeric_cols].where(data[numeric_cols] > 0)
-    # 按时间窗口分组并求和
-    grouped = data.groupby('Time_bin', observed=True)[numeric_cols].sum()
-    # 计算能量
-    grouped_energy = 10 ** (1.5 * grouped)
-    # 计算对数能���
+
+    # 先对每个震级计算能量
+    data[numeric_cols] = 10 ** (1.5 * data[numeric_cols])
+
+    # 按时间窗口分组，并对能量求和
+    grouped_energy = data.groupby('Time_bin', observed=True)[numeric_cols].sum()
+
+    # 计算对数能量
     log_energy = (1 / 1.5) * np.log10(grouped_energy.replace(0, np.nan))
+
     # 填充NaN为0
     log_energy_filled = log_energy.fillna(0)
+
     # 更新索引为时间窗口的开始日期
     log_energy_filled.index = log_energy_filled.index.map(lambda x: x.left.strftime('%Y-%m-%d'))
 
@@ -343,16 +348,18 @@ def graph_laplacian_embedding(adj_matrix, k):
 
     return selected_eigenvectors
 
-def generate_masks(es_geo_matrix, es_sem_matrix, gnss_geo_matrix, far_mask_delta, dtw_delta):
+import torch
+
+def generate_masks(es_geo_matrix, es_sem_matrix, gnss_geo_matrix, geo_percentage=0.3, sem_percentage=0.3):
     """
-    生成地理和语义掩码。
+    生成地理和语义掩码，使用百分比来定义掩码阈值。
 
     参数:
     - es_geo_matrix: 地震-站点的地理邻接矩阵。
     - es_sem_matrix: 地震-站点的语义邻接矩阵。
     - gnss_geo_matrix: GNSS邻接矩阵。
-    - far_mask_delta: 距离阈值。
-    - dtw_delta: DTW阈值。
+    - geo_percentage: 需要掩蔽的地理距离百分比。
+    - sem_percentage: 需要掩蔽的语义距离百分比。
 
     返回:
     - geo_mask: 地理掩码。
@@ -364,16 +371,15 @@ def generate_masks(es_geo_matrix, es_sem_matrix, gnss_geo_matrix, far_mask_delta
     gnss_geo_matrix = torch.tensor(gnss_geo_matrix.values.T, dtype=torch.float32)
 
     num_nodes = es_geo_matrix.shape[0]
-    gnss_station_num = gnss_geo_matrix.shape[0]
 
-    # 生成geo_mask
-    geo_mask = es_geo_matrix >= far_mask_delta
-    # 生成sem_mask
-    sem_mask = torch.ones(num_nodes, num_nodes, dtype=torch.bool)
-    sem_mask_indices = es_sem_matrix.argsort(dim=1)[:, :dtw_delta]
-    sem_mask.scatter_(1, sem_mask_indices, False)
-    # 生成gnss_geo_mask
-    gnss_geo_mask = gnss_geo_matrix >= far_mask_delta
+    geo_threshold = torch.quantile(es_geo_matrix.flatten(), 1 - geo_percentage)
+    geo_mask = es_geo_matrix > geo_threshold
+
+    sem_threshold = torch.quantile(es_sem_matrix.flatten(), sem_percentage)
+    sem_mask = es_sem_matrix < sem_threshold
+
+    gnss_geo_threshold = torch.quantile(gnss_geo_matrix.flatten(), 1 - geo_percentage)
+    gnss_geo_mask = gnss_geo_matrix > gnss_geo_threshold
 
     return geo_mask, sem_mask, gnss_geo_mask
 
@@ -501,7 +507,6 @@ class CombinedEarthquakeGNSSDataset(Dataset):
         log_energy_future = torch.stack(log_energy_future_list)
         earthquake_data_future_day = torch.stack(earthquake_data_future_day_list)
 
-        # 对掩码和嵌入进行堆叠
         es_geo_masks = torch.stack(es_geo_masks)
         es_sem_masks = torch.stack(es_sem_masks)
         gnss_geo_masks = torch.stack(gnss_geo_masks)
@@ -523,13 +528,11 @@ class CombinedEarthquakeGNSSDataset(Dataset):
             'lap_gnss': lap_gnss,
             'earthquake_happen':earthquake_happen,
             'gnss_padding_mask': gnss_padding_mask
-
-
         }
 
         return batch_data
 
-def get_dataset(data_dir,window_size,forecast_horizon,lape_dim,far_mask_delta,dtw_delta,time_resolution):
+def get_dataset(data_dir,window_size,forecast_horizon,lape_dim,geo_percentage,sem_percentage,time_resolution):
     """
     Load the dataset from the specified directory.
     data_dir: Path to the directory containing the dataset files.
@@ -550,8 +553,8 @@ def get_dataset(data_dir,window_size,forecast_horizon,lape_dim,far_mask_delta,dt
         gnss_geo_matrix = pd.read_csv(data_path+"gnss_geo_matrix.csv", index_col=0)
         dataset_dict[area] =  EarthquakeGNSSDataset(area=area,
                                                     earthquake_data=earthquake_data,es_geo_matrix=es_geo_matrix,es_sem_matrix=es_sem_matrix,
-                                                    gnss_geo_matrix=gnss_geo_matrix,gnss_data=gnss_data,far_mask_delta=far_mask_delta,
-                                                    dtw_delta=dtw_delta,lape_dim=lape_dim,
+                                                    gnss_geo_matrix=gnss_geo_matrix,gnss_data=gnss_data,geo_percentage=geo_percentage, sem_percentage=sem_percentage,
+                                                    lape_dim=lape_dim,
                                                     window_size=window_size,forecast_horizon=forecast_horizon,earthquake_threshold=4,time_resolution=time_resolution)
     dataset = CombinedEarthquakeGNSSDataset(dataset_dict)
     return dataset

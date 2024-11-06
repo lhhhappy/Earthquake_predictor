@@ -64,7 +64,6 @@ class LaplacianPE(nn.Module):
         # lap_mx: (batch_size, N, lape_dim)
         lap_pos_enc = self.embedding_lap_pos_enc(lap_mx)  # (batch_size, N, embed_dim)
         lap_pos_enc = lap_pos_enc.unsqueeze(1)  # (batch_size, 1, N, embed_dim)
-        print(lap_pos_enc.shape)
         return lap_pos_enc
 
 class DataEmbedding(nn.Module):

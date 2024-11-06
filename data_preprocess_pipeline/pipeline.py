@@ -5,7 +5,7 @@ import pandas as pd
 
 # 参数设置
 start_year = 2000
-end_year = 2015
+end_year = 2024
 
 #latmin, latmax, lonmin, lonmax
 
@@ -32,7 +32,7 @@ for area, [minlat, maxlat, minlon, maxlon] in area_dict.items():
     distance_threshold = 100
 
     # 时间范围
-    os.makedirs(save_path, exist_ok=True)
+    
     start_date = pd.to_datetime(f'{start_year}-01-01')
     end_date = pd.to_datetime(f'{end_year}-12-31')
 
@@ -60,6 +60,8 @@ for area, [minlat, maxlat, minlon, maxlon] in area_dict.items():
     if len(station_names) <= 50:
         print("该区域站点数量过少，跳过")
         continue
+
+    os.makedirs(save_path, exist_ok=True)
     pickle.dump(station_dict_use, open(save_path+'/station_dict_use.pkl', 'wb'))
 
     # 下载地震数据和GNSS数据
