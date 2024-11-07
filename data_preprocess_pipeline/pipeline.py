@@ -10,20 +10,19 @@ end_year = 2024
 #latmin, latmax, lonmin, lonmax
 
 """
-    "Japan (Honshu region)": [35, 40, 137, 143],  # 日本本州中北部
-    "California (Southern)": [32, 37, -120, -115],  # 加州南部区域
+
 """
 
 area_dict = {
-    "Eastern Mediterranean (Europe)": [34, 42, 20, 35],  # 地中海东部，包括希腊、土耳其等地
-    "Alps Region (Europe)": [44, 48, 5, 15],  # 欧洲阿尔卑斯山区
-    "South Africa (SANSN coverage)": [-35, -22, 16, 32],  # 南非南部覆盖的地震监测区域
-    "New Zealand": [-45, -35, 165, 180],  # 新西兰地震活跃带
-    "Chile (South America)": [-30, -20, -75, -65],  # 智利北部沿海
-    "Turkey (Anatolian Fault Zone)": [36, 41, 26, 42],  # 土耳其安纳托利亚断层带
-    "Philippines (Luzon)": [12, 18, 120, 126],  # 菲律宾吕宋岛
-    "Indonesia (Sumatra)": [0, 5, 95, 105]  # 印尼苏门答腊区域
+    "Ibaraki": [35, 40, 139, 144],  # 茨城县
+    "Hokkaido": [40, 45, 141, 147],  # 北海道
+    "Miyagi": [37, 42, 140, 145],  # 宫城县
+    "Fukushima": [36, 41, 140, 145],  # 福岛
+    "Kumamoto": [32, 37, 130, 135],  # 熊本
+    "Anchorage": [60, 65, -150, -145],  # 安克雷奇
+    "California (Southern)": [32, 37, -120, -115],  # 加州南部
 }
+
 
 for area, [minlat, maxlat, minlon, maxlon] in area_dict.items():
     save_path = "/home/linhang/workbench/Earthquake_data/"+area
@@ -56,8 +55,9 @@ for area, [minlat, maxlat, minlon, maxlon] in area_dict.items():
         maxlongitude=maxlon
     )
     station_names = list(station_dict_use.keys())
+    print(f"处理区域: {area}")
     print(f"使用的站点数量: {len(station_names)}")
-    if len(station_names) <= 50:
+    if len(station_names) <= 30:
         print("该区域站点数量过少，跳过")
         continue
 
@@ -93,7 +93,7 @@ for area, [minlat, maxlat, minlon, maxlon] in area_dict.items():
     )
     print("能量数据处理完成")
     # 构建地震数据CSV
-    construct_earthquake_csv(
+    earthquake_csv = construct_earthquake_csv(
         directory=save_path+"/grid_data",
         start_date=start_date,
         end_date=end_date,
@@ -119,19 +119,19 @@ for area, [minlat, maxlat, minlon, maxlon] in area_dict.items():
 
     # 生成地震网格的邻接矩阵
 
-    generate_grid_aij(
-        input_dir=save_path+'/grid_data',  # 应该是目录
+    generate_sem_aij(
+        data=earthquake_csv,
         output_file=save_path+'/es_sem_matrix.csv',
     )
     print("地震网格邻接矩阵生成完成")
 
-    generate_station_aij(
+    generate_geo_aij(
         station_dict=station_dict_fliter,
         save_path=save_path+'/gnss_geo_matrix.csv',
     )
     print("站点邻接矩阵生成完成")
 
-    generate_station_aij(
+    generate_geo_aij(
         station_dict=earthquake_dict,
         save_path=save_path+'/es_geo_matrix.csv'
     )

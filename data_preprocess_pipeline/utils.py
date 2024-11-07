@@ -345,95 +345,39 @@ def construct_gnss_csv(directory, start_date, end_date, output_file, station_dic
 
 
 
-# 初始化全局Aij矩阵
-def initialize_Aij(num_grids):
-    return np.zeros((num_grids, num_grids))
-
-# 更新连接矩阵，基于节点列表
-def update_adjacency_matrix(A, node_list):
-    for i, j in combinations(node_list, 2):
-        A[i, j] += 1
-        A[j, i] += 1  # 保证矩阵对称
-    return A
-
-# 根据第n天提取数据
-def get_data_for_nth_day(df, n):
-    return df[df['DayOfYear'] == n]
-
-# 处理某一天的数据，更新Aij矩阵
-def process_day(df, day, use_grid_id_dict, Aij):
-    data = get_data_for_nth_day(df, day)
-    # 提取发生地震的网格ID并去重
-    earthquake_occur_id = data['Location_id'].fillna(-1).astype(int)
-    unique_grid_ids = [use_grid_id_dict[int(x)] for x in earthquake_occur_id if int(x) in use_grid_id_dict]
-    unique_grid_ids = list(set(unique_grid_ids))  # 保证当天相同网格的地震只处理一次
-    Aij = update_adjacency_matrix(Aij, unique_grid_ids)
-    return Aij
-
-def process_single_file(args):
-    df_dir, input_dir, use_grid_id = args
-    print(f"Processing file: {df_dir}")
-    df = pd.read_csv(os.path.join(input_dir, df_dir), encoding='ISO-8859-1')
-
-    # 检查是否有解析失败的日期
-    if df['Time'].isnull().any():
-        invalid_times = df[df['Time'].isnull()]
-        print(f"Warning: Found invalid time formats in file {df_dir}:\n{invalid_times[['ID', 'Time']]}")
-        # 可以选择删除这些行，或者进行其他处理
-        df = df.dropna(subset=['Time'])
-
-    # 将 'Time' 列设置为索引
-    df["Time"] = pd.to_datetime(df["Time"], format='ISO8601')
-    df['DayOfYear'] = df['Time'].dt.dayofyear
-
-    Aij = initialize_Aij(len(use_grid_id))
-
-    # 按天处理数据
-    for day in range(1, 367):  # 考虑到闰年，范围设为1-366
-        Aij = process_day(df, day, use_grid_id, Aij)
-
-    return Aij
-
-def generate_grid_aij(input_dir, output_file, use_grid_id =None):
+def generate_sem_aij(data, output_file):
     """
-    生成地震网格的邻接矩阵（Aij），基于输入的地震CSV文件并保存为pickle格式。
+    从地震数据生成网格的邻接矩阵（Aij），并保存为CSV格式。
 
     参数：
-    - input_dir: 包含earthquake_csv文件的输入目录路径。
-    - output_file: 输出的Aij矩阵保存路径（pickle格式）。
-    - use_grid_id: 使用的网格ID列表。
+    - data: 包含地震大小的DataFrame，行索引为日期，列为不同的网格。
+    - output_file: 输出的Aij矩阵保存路径（CSV格式）。
     """
-    df_list = sorted(os.listdir(input_dir))
-    df_list = [x for x in df_list if x.endswith('.csv')]
-    if use_grid_id is None:
-        use_grid_id = np.arange(0, len(df_list),1)
-
-    # 获取df文件列表并排序
+    # 获取网格数量
+    num_grids = data.shape[1]
     
+    # 初始化 Aij 矩阵
+    Aij = np.zeros((num_grids, num_grids))
 
-    # 多进程处理多个文件
-    def process_all_files_multithreaded(df_list):
-        Aij_global = initialize_Aij(len(use_grid_id))
+    # 遍历每一天的数据
+    for day in range(data.shape[0]):
+        # 获取当天有地震的网格索引
+        active_grids = np.where(data.values[day] != 0)[0]
+        
+        # 如果当天有多个网格发生地震
+        if len(active_grids) > 1:
+            # 更新邻接矩阵
+            for i in range(len(active_grids)):
+                for j in range(i + 1, len(active_grids)):
+                    grid_i = active_grids[i]
+                    grid_j = active_grids[j]
+                    Aij[grid_i, grid_j] += 1
+                    Aij[grid_j, grid_i] += 1  # 确保对称性
 
-        # 准备参数列表
-        args_list = [(df_dir, input_dir, use_grid_id) for df_dir in df_list]
-
-        # 使用进程池处理每个文件
-        with ProcessPoolExecutor() as executor:
-            futures = [executor.submit(process_single_file, args) for args in args_list]
-
-            # 串行累加每个文件处理完的Aij矩阵
-            for future in futures:
-                Aij = future.result()
-                Aij_global += Aij  # 累加
-
-        return Aij_global
-
-    # 多线程处理所有文件
-    Aij_global = process_all_files_multithreaded(df_list)
-
-    # 保存Aij矩阵
-    Aij_df = pd.DataFrame(Aij_global, index=use_grid_id, columns=use_grid_id)
+    # 将 Aij 转换为 DataFrame 以便查看
+    Aij_df = pd.DataFrame(Aij, index=data.columns, columns=data.columns)
+    
+    # 保存Aij矩阵到指定路径
     Aij_df.to_csv(output_file)
     return Aij_df
 
@@ -462,7 +406,7 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     r = 6371  # 地球半径，单位为公里
     return r * c
 
-def generate_station_aij(station_dict,save_path):
+def generate_geo_aij(station_dict,save_path):
     """
     基于站点之间的距离构建邻接矩阵。距离超过阈值的站点将不连接。
     
