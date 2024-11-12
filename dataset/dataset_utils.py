@@ -84,7 +84,7 @@ class EarthquakeGNSSDataset(Dataset):
                  area,
                  earthquake_data, gnss_data,
                  es_geo_matrix, es_sem_matrix, gnss_geo_matrix,
-                 geo_percentage, sem_percentage, lape_dim,
+                 geo_percentage, sem_percentage, lape_dim,earthquake_dict_use,station_dict_use,
                  window_size=14, forecast_horizon=14, time_resolution = 14,
                  earthquake_threshold=4.0, missing_threshold=5):
         """
@@ -114,9 +114,9 @@ class EarthquakeGNSSDataset(Dataset):
         self.missing_threshold = missing_threshold
         self.lape_dim = lape_dim
         self.time_resolution = time_resolution
+        self.earthquake_loaction = torch.tensor([earthquake_dict_use[i] for i in sorted(earthquake_dict_use.keys())])
+        self.station_loaction = np.array([station_dict_use[i] for i in sorted(station_dict_use.keys())],dtype=np.float32)
 
-        # 计算数据集的长度
-        self.length = len(earthquake_data) - window_size - forecast_horizon + 1
 
         self.normalized_gnss_data = dataframe_to_array(self.gnss_data)
 
@@ -124,7 +124,9 @@ class EarthquakeGNSSDataset(Dataset):
         self.es_geo_mask, self.es_sem_mask, self.gnss_geo_mask = generate_masks(
             es_geo_matrix, es_sem_matrix, gnss_geo_matrix, geo_percentage, sem_percentage
         )
-
+        self.start_index = self.find_first_valid_index(self.normalized_gnss_data)
+        
+        self.length = len(earthquake_data) - window_size - forecast_horizon + 1 - self.start_index
 
         self.lap_ex = graph_laplacian_embedding(torch.tensor(es_geo_matrix.values), lape_dim)
 
@@ -136,9 +138,9 @@ class EarthquakeGNSSDataset(Dataset):
 
     def __getitem__(self, idx):
         # 获取历史和未来的地震数据
-        earthquake_data_history = self.earthquake_data.iloc[idx:idx + self.window_size]
+        earthquake_data_history = self.earthquake_data.iloc[self.start_index+idx:self.start_index+idx + self.window_size]
         earthquake_data_future = self.earthquake_data.iloc[
-            idx + self.window_size:idx + self.window_size + self.forecast_horizon
+            self.start_index+idx + self.window_size:idx + self.window_size + self.forecast_horizon+self.start_index
         ]
 
         earthquake_happen = torch.tensor((earthquake_data_future >= self.earthquake_threshold).any(axis=0).to_numpy(), dtype=torch.bool)
@@ -154,7 +156,6 @@ class EarthquakeGNSSDataset(Dataset):
 
         # 获取GNSS数据的历史部分并处理
         gnss_data_history = self.normalized_gnss_data[idx:idx + self.window_size].transpose(1,0,2)  # 形状：(window_size, num_stations)
-
         # 检测并移除具有长连续缺失数据的站点
         missing_mask = np.isnan(gnss_data_history).all(axis=2)
         max_missing_lengths = self.max_consecutive_trues(missing_mask)
@@ -162,6 +163,8 @@ class EarthquakeGNSSDataset(Dataset):
 
         # 更新gnss_data_history和gnss_geo_mask
         gnss_data_history = gnss_data_history[stations_to_keep]
+        station_location_use = self.station_loaction[stations_to_keep]
+
         sample_gnss_geo_mask = self.gnss_geo_mask[np.ix_(stations_to_keep, stations_to_keep)]
 
         # 生成GNSS数据的图拉普拉斯嵌入
@@ -179,6 +182,7 @@ class EarthquakeGNSSDataset(Dataset):
         earthquake_data_future_day = torch.tensor(
             earthquake_data_future_day, dtype=torch.float32
         ).squeeze(-1)
+        station_location_use = torch.tensor(station_location_use, dtype=torch.float32)
 
         return {
             'log_energy_history': log_energy_history,
@@ -190,9 +194,19 @@ class EarthquakeGNSSDataset(Dataset):
             'gnss_geo_mask': sample_gnss_geo_mask,
             'lap_ex': self.lap_ex,
             'lap_gnss': sample_lap_gnss,
-            "earthquake_happen":earthquake_happen
+            "earthquake_happen":earthquake_happen,
+            "earthquake_loaction":self.earthquake_loaction,
+            "station_loaction":station_location_use
         }
-
+    def find_first_valid_index(self, gnss_data):
+        """
+        查找 GNSS 数据中第一个包含至少两个非 NaN 数据的时间点索引。
+        """
+        for idx, data in enumerate(gnss_data):
+            # 统计非 NaN 元素数量
+            if np.sum(~np.isnan(data)) >= 2:
+                return idx
+        return 0
     @staticmethod
     def max_consecutive_trues(arr):
         """
@@ -490,6 +504,8 @@ class CombinedEarthquakeGNSSDataset(Dataset):
         lap_ex_list = []
         lap_gnss_list = []
         earthquake_happen_list = []
+        earthquake_loaction_list = []
+        station_loaction_list = []
         # 遍历批次中的每个样本，填充 GNSS 数据和掩码以匹配最大节点数
         gnss_padding_mask_list = []
         for item in batch:
@@ -519,6 +535,7 @@ class CombinedEarthquakeGNSSDataset(Dataset):
 
             # 填充 gnss_geo_mask
             gnss_geo_mask = item['gnss_geo_mask']
+
             padded_gnss_geo_mask = F.pad(
                 gnss_geo_mask,
                 pad=(0, pad_gnss_nodes, 0, pad_gnss_nodes),
@@ -534,18 +551,23 @@ class CombinedEarthquakeGNSSDataset(Dataset):
                 mode='constant',
                 value=0
             )
+            
 
             # 填充 es_geo_mask 和 es_sem_mask，使其形状一致
             es_geo_mask = item['es_geo_mask']
             es_sem_mask = item['es_sem_mask']
-            # 假设 es_geo_mask 和 es_sem_mask 形状相同，不需要填充
-            # 如果需要根据区域调整填充，可以在此添加相应的代码
+            earthquake_quake_loaction = item['earthquake_loaction']
+            station_loaction = item['station_loaction']
+            print(station_loaction.shape)
+            padded_station_loaction = F.pad(
+                station_loaction,
+                pad=(0, 0, 0, pad_gnss_nodes),
+                mode='constant',
+                value=0
+            )
 
-            # 填充 lap_ex（地震站点的嵌入），如果不同区域的形状不同，需要统一
             lap_ex = item['lap_ex']
-            # 假设 lap_ex 在不同区域之间形状相同，不需要填充
 
-            # 存储掩码和嵌入
             es_geo_masks.append(es_geo_mask)
             es_sem_masks.append(es_sem_mask)
             gnss_geo_masks.append(padded_gnss_geo_mask)
@@ -553,8 +575,8 @@ class CombinedEarthquakeGNSSDataset(Dataset):
             lap_gnss_list.append(padded_lap_gnss)
             earthquake_happen_list.append(item['earthquake_happen'])
             gnss_padding_mask_list.append(gnss_padding_mask)
-
-        # 将数据堆叠，创建批次张量
+            earthquake_loaction_list.append(earthquake_quake_loaction)
+            station_loaction_list.append(padded_station_loaction)
         
         log_energy_history = torch.stack(log_energy_history_list)
         gnss_data_history = torch.stack(gnss_data_history_list)
@@ -568,6 +590,8 @@ class CombinedEarthquakeGNSSDataset(Dataset):
         lap_gnss = torch.stack(lap_gnss_list)
         earthquake_happen = torch.stack(earthquake_happen_list)
         gnss_padding_mask = torch.stack(gnss_padding_mask_list)
+        earthquake_loaction = torch.stack(earthquake_loaction_list)
+        station_loaction = torch.stack(station_loaction_list)
 
         # 组合成字典
         batch_data = {
@@ -581,7 +605,9 @@ class CombinedEarthquakeGNSSDataset(Dataset):
             'lap_ex': lap_ex,
             'lap_gnss': lap_gnss,
             'earthquake_happen':earthquake_happen,
-            'gnss_padding_mask': gnss_padding_mask
+            'gnss_padding_mask': gnss_padding_mask,
+            'earthquake_loaction':earthquake_loaction,
+            'station_loaction':station_loaction
         }
 
         return batch_data
