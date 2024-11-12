@@ -28,7 +28,6 @@ for area, [minlat, maxlat, minlon, maxlon] in area_dict.items():
     save_path = "/home/linhang/workbench/Earthquake_data/"+area
     topk = 100
     lat_step, lon_step = 0.1, 0.1
-    distance_threshold = 100
 
     # 时间范围
     
@@ -65,7 +64,7 @@ for area, [minlat, maxlat, minlon, maxlon] in area_dict.items():
     pickle.dump(station_dict_use, open(save_path+'/station_dict_use.pkl', 'wb'))
 
     # 下载地震数据和GNSS数据
-    download_earthquake_data(start_year, end_year, minlat, maxlat, minlon, maxlon, save_path+"/usgs_data_year")
+    download_earthquake_data(start_year, end_year, minlat, maxlat, minlon, maxlon, save_path+"/usgs_data_year",minmagnitude = 1.5)
     print("地震数据下载完成")
     download_GNSS_data(station_names, save_path+"/GNSS_day")
     print("GNSS数据下载完成")

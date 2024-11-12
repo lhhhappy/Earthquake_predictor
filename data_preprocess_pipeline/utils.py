@@ -7,13 +7,17 @@ import numpy as np
 import pickle
 from itertools import combinations
 from concurrent.futures import ProcessPoolExecutor
+from dtaidistance import dtw
+from scipy.signal import savgol_filter
+from joblib import Parallel, delayed
 
-def download_earthquake_data(start_year, end_year, minlatitude, maxlatitude, minlongitude, maxlongitude,save_path):
+
+def download_earthquake_data(start_year, end_year, minlatitude, maxlatitude, minlongitude, maxlongitude,save_path,minmagnitude=2.5, maxmagnitude=10):
     os.makedirs(save_path, exist_ok=True)
     for year in range(start_year, end_year):
         box_events = search(starttime=datetime(year, 1, 1, 00, 00), endtime=datetime(year+1, 1, 1, 00, 00),
                     minlatitude=minlatitude, maxlatitude=maxlatitude, minlongitude=minlongitude, maxlongitude=maxlongitude,
-                    minmagnitude=0, maxmagnitude=10)
+                    minmagnitude=minmagnitude, maxmagnitude=10)
         events_data = [{
         'ID': event.id,
         'Time': event.time,
@@ -264,7 +268,6 @@ def construct_energy_csv(directory, output_file):
                 df = pd.read_csv(file_path, index_col=0)
                 if "Location_id" in df.columns and "Energy" in df.columns:
                     Location_id = df["Location_id"].iloc[0]
-                    # 将能量数据存入df_temp
                     df_temp[Location_id] = df['Energy']
                     df_temp.index = df.index
                     data_frames.append(df_temp)
@@ -343,41 +346,53 @@ def construct_gnss_csv(directory, start_date, end_date, output_file, station_dic
         print("没有有效的监测站数据。")
     return station_dict_fliter
 
-
-
-def generate_sem_aij(data, output_file):
+def generate_time_bins(start_date, end_date, time_resolution=14):
     """
-    从地震数据生成网格的邻接矩阵（Aij），并保存为CSV格式。
+    高效批量生成以time_resolution天为间隔的时间窗口。
 
-    参数：
-    - data: 包含地震大小的DataFrame，行索引为日期，列为不同的网格。
-    - output_file: 输出的Aij矩阵保存路径（CSV格式）。
+    参数:
+        start_date (str or pd.Timestamp): 开始日期。
+        end_date (str or pd.Timestamp): 结束日期。
+        time_resolution (int): 间隔的天数。
+
+    返回:
+        pd.DatetimeIndex: 以time_resolution天为间隔的时间窗口序列。
     """
-    # 获取网格数量
-    num_grids = data.shape[1]
-    
-    # 初始化 Aij 矩阵
-    Aij = np.zeros((num_grids, num_grids))
+    start_date = pd.to_datetime(start_date)
+    end_date = pd.to_datetime(end_date)
+    time_bins = pd.date_range(start=start_date, end=end_date + pd.Timedelta(days=time_resolution), freq=f'{time_resolution}D')
+    return time_bins
 
-    # 遍历每一天的数据
-    for day in range(data.shape[0]):
-        # 获取当天有地震的网格索引
-        active_grids = np.where(data.values[day] != 0)[0]
-        
-        # 如果当天有多个网格发生地震
-        if len(active_grids) > 1:
-            # 更新邻接矩阵
-            for i in range(len(active_grids)):
-                for j in range(i + 1, len(active_grids)):
-                    grid_i = active_grids[i]
-                    grid_j = active_grids[j]
-                    Aij[grid_i, grid_j] += 1
-                    Aij[grid_j, grid_i] += 1  # 确保对称性
+def no_lag_filter(data, window_length=9, polyorder=3):
+    if window_length % 2 == 0:
+        raise ValueError("窗口长度必须是奇整数。")
+    smoothed_data = savgol_filter(data, window_length=window_length, polyorder=polyorder)
+    return smoothed_data
 
-    # 将 Aij 转换为 DataFrame 以便查看
-    Aij_df = pd.DataFrame(Aij, index=data.columns, columns=data.columns)
-    
-    # 保存Aij矩阵到指定路径
+def generate_sem_aij(data, output_file, window_length=9, polyorder=3):
+    df = calculate_energy_in_time_window(data, time_resolution = 14)
+    n_columns = df.shape[1]
+    similarity_matrix = np.zeros((n_columns, n_columns))
+
+    # 预处理每列数据，使用无滞后滤波器
+    filtered_data = df.apply(lambda col: no_lag_filter(col.values, window_length, polyorder), axis=0)
+
+    def compute_distance(i, j):
+        distance = dtw.distance(filtered_data.iloc[:, i].values, filtered_data.iloc[:, j].values)
+        print(f"Computing distance between columns {i} and {j}: {distance}")
+        return i, j, distance
+
+    # 并行计算距离，并收集结果
+    results = Parallel(n_jobs=-1)(
+        delayed(compute_distance)(i, j) 
+        for i in range(n_columns) 
+        for j in range(i, n_columns)
+    )
+
+    for i, j, distance in results:
+        similarity_matrix[i, j] = distance
+        similarity_matrix[j, i] = distance  # 对称矩阵
+    Aij_df = pd.DataFrame(similarity_matrix, index=df.columns, columns=df.columns)
     Aij_df.to_csv(output_file)
     return Aij_df
 
@@ -438,3 +453,46 @@ def generate_geo_aij(station_dict,save_path):
     Aij_df = pd.DataFrame(Aij, index=station_names, columns=station_names)
     Aij_df.to_csv(save_path)
     return Aij_df
+
+
+def calculate_energy_in_time_window(data, time_resolution=14):
+    """
+    计算在指定时间窗口内的能量。
+
+    参数:
+        data (pd.DataFrame): 包含站点数据的DataFrame，行名为日期，列名为站点名。
+        time_resolution (int): 时间窗口的间隔天数。
+
+    返回:
+        pd.DataFrame: 每个站点在每个时间窗口内的对数能量结果。
+    """
+    # 自动获取开始和结束日期
+    start_date = data.index.min()
+    end_date = data.index.max()
+
+    time_bins = generate_time_bins(start_date, end_date, time_resolution=time_resolution)
+
+    data = data.copy()
+    # 将日期分配到时间窗口
+    data['Time_bin'] = pd.cut(data.index, bins=time_bins, right=False)
+
+    numeric_cols = data.select_dtypes(include=[np.number]).columns
+
+    data[numeric_cols] = data[numeric_cols].where(data[numeric_cols] > 0)
+
+    # 先对每个震级计算能量
+    data[numeric_cols] = 10 ** (1.5 * data[numeric_cols])
+
+    # 按时间窗口分组，并对能量求和
+    grouped_energy = data.groupby('Time_bin', observed=True)[numeric_cols].sum()
+
+    # 计算对数能量
+    log_energy = (1 / 1.5) * np.log10(grouped_energy.replace(0, np.nan))
+
+    # 填充NaN为0
+    log_energy_filled = log_energy.fillna(0)
+
+    # 更新索引为时间窗口的开始日期
+    log_energy_filled.index = log_energy_filled.index.map(lambda x: x.left.strftime('%Y-%m-%d'))
+
+    return log_energy_filled

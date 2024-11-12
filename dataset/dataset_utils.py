@@ -11,6 +11,63 @@ from scipy.linalg import eigh
 from torch.nn import functional as F
 from scipy.interpolate import interp1d
 
+
+def normalize_gnss(array_3d, method='min-max'):
+    """
+    对三维数组进行归一化，支持多种归一化方法。
+    
+    参数：
+    - array_3d: 输入的三维数组，形状为 (时间步, 特征, 通道)。
+    - method: 归一化方法，支持 'min-max', 'z-score', 'max-abs'。
+    
+    返回：
+    - 归一化后的三维数组，形状与输入相同。
+    """
+    # 创建一个布尔掩码，标记有效的数据（非NaN的行）
+    mask = ~np.isnan(array_3d).any(axis=2)  # (时间步, 特征)，标记有效行
+
+    # 初始化一个与 array_3d 相同形状的归一化结果数组
+    normalized_array = np.copy(array_3d)
+    
+    if method == 'min-max':
+        # Min-Max 归一化，将值缩放到 [0, 1]
+        min_vals = np.nanmin(np.where(mask[:, :, None], array_3d, np.nan), axis=0)  # (特征, 通道)
+        max_vals = np.nanmax(np.where(mask[:, :, None], array_3d, np.nan), axis=0)  # (特征, 通道)
+        
+        range_vals = max_vals - min_vals
+        range_vals[range_vals == 0] = 1  # 避免分母为零
+
+        normalized_array = (array_3d - min_vals) / range_vals
+    
+    elif method == 'z-score':
+        # Z-score 标准化，使得均值为 0，标准差为 1
+        mean_vals = np.nanmean(np.where(mask[:, :, None], array_3d, np.nan), axis=0)  # (特征, 通道)
+        std_vals = np.nanstd(np.where(mask[:, :, None], array_3d, np.nan), axis=0)    # (特征, 通道)
+        
+        std_vals[std_vals == 0] = 1  # 避免分母为零
+
+        normalized_array = (array_3d - mean_vals) / std_vals
+    
+    elif method == 'max-abs':
+        # 最大绝对值归一化，将值缩放到 [-1, 1]
+        max_abs_vals = np.nanmax(np.abs(np.where(mask[:, :, None], array_3d, np.nan)), axis=0)  # (特征, 通道)
+        
+        max_abs_vals[max_abs_vals == 0] = 1  # 避免分母为零
+
+        normalized_array = array_3d / max_abs_vals
+    
+    else:
+        raise ValueError("Unsupported normalization method. Choose from 'min-max', 'z-score', 'max-abs'.")
+
+    normalized_array[~mask] = np.nan
+    
+    return normalized_array
+
+def dataframe_to_array(df):
+    df_filled = df.apply(lambda col: col.map(lambda x: x if isinstance(x, list) and len(x) == 4 else [np.nan] * 4))
+    array_3d = np.array(df_filled.values.tolist()).reshape(df.shape[0], df.shape[1], 4)
+    return array_3d
+
 def parse_str_list(cell):
     try:
         return ast.literal_eval(cell)
@@ -61,11 +118,14 @@ class EarthquakeGNSSDataset(Dataset):
         # 计算数据集的长度
         self.length = len(earthquake_data) - window_size - forecast_horizon + 1
 
+        self.normalized_gnss_data = dataframe_to_array(self.gnss_data)
+
         # 生成掩码
         self.es_geo_mask, self.es_sem_mask, self.gnss_geo_mask = generate_masks(
             es_geo_matrix, es_sem_matrix, gnss_geo_matrix, geo_percentage, sem_percentage
         )
-        # 计算地震站点的图拉普拉斯嵌入
+
+
         self.lap_ex = graph_laplacian_embedding(torch.tensor(es_geo_matrix.values), lape_dim)
 
     def __len__(self):
@@ -93,24 +153,16 @@ class EarthquakeGNSSDataset(Dataset):
         )
 
         # 获取GNSS数据的历史部分并处理
-        gnss_data_history = self.gnss_data.iloc[idx:idx + self.window_size].values  # 形状：(window_size, num_stations)
-
-        # 转置后，每个元素代表一个站点的时间序列数据
-        gnss_data_history = gnss_data_history.T  # 形状：(num_stations, window_size)
-
-        # 将每个站点的数据转换为固定长度的数组，形状：(num_stations, window_size, num_features)
-        gnss_data_history = np.array([
-            convert_to_fixed_length_array(station_data) for station_data in gnss_data_history
-        ])
+        gnss_data_history = self.normalized_gnss_data[idx:idx + self.window_size].transpose(1,0,2)  # 形状：(window_size, num_stations)
 
         # 检测并移除具有长连续缺失数据的站点
-        missing_mask = np.isnan(gnss_data_history).all(axis=2)  # 形状：(num_stations, window_size)
+        missing_mask = np.isnan(gnss_data_history).all(axis=2)
         max_missing_lengths = self.max_consecutive_trues(missing_mask)
         stations_to_keep = max_missing_lengths <= self.missing_threshold
 
         # 更新gnss_data_history和gnss_geo_mask
         gnss_data_history = gnss_data_history[stations_to_keep]
-        sample_gnss_geo_mask = self.gnss_geo_mask[stations_to_keep][:, stations_to_keep]
+        sample_gnss_geo_mask = self.gnss_geo_mask[np.ix_(stations_to_keep, stations_to_keep)]
 
         # 生成GNSS数据的图拉普拉斯嵌入
         sample_lap_gnss = graph_laplacian_embedding(sample_gnss_geo_mask.float(), self.lape_dim)
@@ -209,6 +261,7 @@ def convert_to_fixed_length_array(data, length=4):
     return np.array(fixed_length_array)  # 形状：(window_size, length)
 
 def fill_nan_with_interpolation(data):
+
     """
     使用插值填充数据中的NaN值。
 
@@ -218,12 +271,13 @@ def fill_nan_with_interpolation(data):
     返回：
     - 填充NaN后的数据
     """
+
     num_stations, window_size, num_features = data.shape
     # 将数据展平成二维数组，形状为(num_stations * num_features, window_size)
-    data_reshaped = data.reshape(num_stations * num_features, window_size)
+    data_reshaped = data.transpose(0, 2, 1).reshape(num_stations * num_features, window_size)
     # 创建缺失值掩码
     nans = np.isnan(data_reshaped)
-    # 对于每一行（对应一个特征的时间序列），进行��值
+    # 对于每一行（对应一个特征的时间序列），进行插值
     for i in range(data_reshaped.shape[0]):
         if not nans[i].all():
             data_reshaped[i][nans[i]] = np.interp(
@@ -232,9 +286,9 @@ def fill_nan_with_interpolation(data):
         else:
             # 如果整行都是NaN，用零替换
             data_reshaped[i] = np.zeros(window_size)
-    # 恢复原始形状
-    data_filled = data_reshaped.reshape(num_stations, num_features, window_size)
-    data_filled = data_filled.transpose(0, 2, 1)  # 形状：(num_stations, window_size, num_features)
+    # 恢复到原始形状，并转置回 (num_stations, window_size, num_features)
+    data_filled = data_reshaped.reshape(num_stations, num_features, window_size).transpose(0, 2, 1)
+    
     return data_filled
 
 def generate_time_bins(start_date, end_date, time_resolution=14):
@@ -372,13 +426,13 @@ def generate_masks(es_geo_matrix, es_sem_matrix, gnss_geo_matrix, geo_percentage
 
     num_nodes = es_geo_matrix.shape[0]
 
-    geo_threshold = torch.quantile(es_geo_matrix.flatten(), 1 - geo_percentage)
+    geo_threshold = torch.quantile(es_geo_matrix.flatten(), geo_percentage)
     geo_mask = es_geo_matrix > geo_threshold
 
     sem_threshold = torch.quantile(es_sem_matrix.flatten(), sem_percentage)
-    sem_mask = es_sem_matrix < sem_threshold
+    sem_mask = es_sem_matrix > sem_threshold
 
-    gnss_geo_threshold = torch.quantile(gnss_geo_matrix.flatten(), 1 - geo_percentage)
+    gnss_geo_threshold = torch.quantile(gnss_geo_matrix.flatten(), geo_percentage)
     gnss_geo_mask = gnss_geo_matrix > gnss_geo_threshold
 
     return geo_mask, sem_mask, gnss_geo_mask

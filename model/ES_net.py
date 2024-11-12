@@ -490,6 +490,7 @@ class ES_net(nn.Module):
 
         self.day_deocder = TemporalConvDecoder(self.skip_dim, num_layers=2, output_dim=self.predict_day_class)
 
+        self.layernorm = nn.LayerNorm(self.skip_dim)
     def forward(self, x, gnss, lap_mx=None, gnss_lap_mx=None, es_geo_mask=None, es_sem_mask=None, gnss_geo_mask=None, gnss_padding_mask=None):
         T = x.shape[1]
         enc = self.enc_embed_layer(x, lap_mx)
@@ -511,7 +512,7 @@ class ES_net(nn.Module):
 
         skip_gnss_week = self.day2week(skip_gnss_day)
 
-        ENC_ST = self.cross_attn(skip_earthquake, skip_gnss_week) + skip_earthquake
+        ENC_ST = self.layernorm(self.cross_attn(skip_earthquake, skip_gnss_week) + skip_earthquake)
         energy_predict = self.es_conv1(F.relu(ENC_ST))
         energy_predict = self.es_conv2(F.relu(energy_predict.permute(0, 3, 2, 1))).permute(0, 3, 2, 1).squeeze(1)
 
