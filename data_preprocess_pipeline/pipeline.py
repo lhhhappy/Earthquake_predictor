@@ -4,15 +4,12 @@ import numpy as np
 import pandas as pd
 
 # 参数设置
-start_year = 2000
+earthquake_start_year = 1980
+station_start_year = 2000
 end_year = 2024
 
 #latmin, latmax, lonmin, lonmax
-
-"""
-
-"""
-
+#     
 area_dict = {
     "Ibaraki": [35, 40, 139, 144],  # 茨城县
     "Hokkaido": [40, 45, 141, 147],  # 北海道
@@ -31,7 +28,8 @@ for area, [minlat, maxlat, minlon, maxlon] in area_dict.items():
 
     # 时间范围
     
-    start_date = pd.to_datetime(f'{start_year}-01-01')
+    station_start_stat = pd.to_datetime(f'{station_start_year}-01-01')
+    earthquake_start_stat = pd.to_datetime(f'{earthquake_start_year}-01-01')
     end_date = pd.to_datetime(f'{end_year}-12-31')
 
     # 加载站点信息
@@ -64,7 +62,7 @@ for area, [minlat, maxlat, minlon, maxlon] in area_dict.items():
     pickle.dump(station_dict_use, open(save_path+'/station_dict_use.pkl', 'wb'))
 
     # 下载地震数据和GNSS数据
-    download_earthquake_data(start_year, end_year, minlat, maxlat, minlon, maxlon, save_path+"/usgs_data_year",minmagnitude = 1.5)
+    download_earthquake_data(earthquake_start_year, end_year, minlat, maxlat, minlon, maxlon, save_path+"/usgs_data_year",minmagnitude = 0)
     print("地震数据下载完成")
     download_GNSS_data(station_names, save_path+"/GNSS_day")
     print("GNSS数据下载完成")
@@ -82,11 +80,11 @@ for area, [minlat, maxlat, minlon, maxlon] in area_dict.items():
             topk=topk
         )
     print("地震数据处理完成")
-    # # 处理能量数据
+
     process_energy_data(
         input_dir=save_path+"/grid_data",
         output_dir=save_path+"/log_energy_data",
-        start_date=start_date.strftime('%Y-%m-%d'),
+        start_date=earthquake_start_stat.strftime('%Y-%m-%d'),
         end_date=end_date.strftime('%Y-%m-%d'),
         freq='2W'
     )
@@ -94,7 +92,7 @@ for area, [minlat, maxlat, minlon, maxlon] in area_dict.items():
     # 构建地震数据CSV
     earthquake_csv = construct_earthquake_csv(
         directory=save_path+"/grid_data",
-        start_date=start_date,
+        start_date=earthquake_start_stat,
         end_date=end_date,
         output_file=save_path+'/earthquake_data.csv'
     )
@@ -109,7 +107,7 @@ for area, [minlat, maxlat, minlon, maxlon] in area_dict.items():
 
     station_dict_fliter =  construct_gnss_csv(
                                 directory=save_path+'/GNSS_day',
-                                start_date=start_date,
+                                start_date=station_start_stat,
                                 end_date=end_date,
                                 output_file=save_path+'/gnss_data.csv',
                                 station_dict=station_dict_use

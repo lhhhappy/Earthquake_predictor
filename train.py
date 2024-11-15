@@ -1,7 +1,7 @@
 # train.py
 import json
 from torch.utils.data import DataLoader
-from model import ES_net
+from model import ES_net, ES_net_mixer
 from argparse import ArgumentParser
 from lightning.pytorch import loggers as pl_loggers
 import lightning as L
@@ -39,6 +39,8 @@ parser.add_argument("--geo-percentage", type=float, default=0.5, help='Percentag
 parser.add_argument("--sem-percentage", type=float, default=0.5, help='Percentage of semantic features')
 parser.add_argument("--time-resolution", type=int, default=1, help='Time resolution for the dataset')
 parser.add_argument("--seed", type=int, default=42, help='Seed for reproducibility')
+parser.add_argument("--earthquake-catalog-window", type=int, default=14, help='Window size for earthquake catalog')
+
 args = parser.parse_args()
 
 # Load dataset
@@ -51,8 +53,9 @@ dataset = get_dataset(
     lape_dim=args.lape_dim,
     geo_percentage=args.geo_percentage,
     sem_percentage=args.sem_percentage,
-    time_resolution=args.time_resolution
-)
+    time_resolution=args.time_resolution,
+    earthquake_catalog_window=args.earthquake_catalog_window
+    )
 
 # Define loss function
 loss_fn = get_loss(energy_loss=args.energy_loss, day_loss=args.day_loss)
@@ -75,7 +78,8 @@ with open(args.model_params, 'r') as f:
     model_par = json.load(f)
 
 model_arch_dict = {
-    "ES_net": ES_net
+    "ES_net": ES_net,
+    "ES_net_mixer": ES_net_mixer
 }
 
 # Initialize the model

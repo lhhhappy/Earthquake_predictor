@@ -1,6 +1,7 @@
 import torch
 import lightning as L
 from .ES_net import ES_net
+from .ES_net_mixer import ES_net_mixer
 
 class LightingModel(L.LightningModule):
     def __init__(self, model, lr=1e-3, max_epoch=300, loss_fns=None, **kwargs):
@@ -39,6 +40,9 @@ class LightingModel(L.LightningModule):
         lap_ex_masks = batch['lap_ex']  
         lap_gnss_masks = batch['lap_gnss']
         gnss_paddding_mask = batch['gnss_padding_mask']
+        earthquake_loaction = batch['earthquake_location']
+        station_loaction = batch['station_location']
+
         # Forward pass through the model
         energy_predict, day_predict = self.model(
             log_energy_history, 
@@ -48,7 +52,9 @@ class LightingModel(L.LightningModule):
             es_geo_mask=es_geo_masks,
             es_sem_mask=es_sem_masks,
             gnss_geo_mask=combined_gnss_masks,
-            gnss_padding_mask=gnss_paddding_mask
+            gnss_padding_mask=gnss_paddding_mask,
+            es_loc = earthquake_loaction,
+            gnss_loc = station_loaction
         )
         
         # Compute the loss using the helper function
@@ -71,7 +77,9 @@ class LightingModel(L.LightningModule):
         lap_ex_masks = batch['lap_ex']  
         lap_gnss_masks = batch['lap_gnss']
         gnss_paddding_mask = batch['gnss_padding_mask']
-        
+        earthquake_loaction = batch['earthquake_location']
+        station_loaction = batch['station_location']
+
         # Forward pass through the model
         energy_predict, day_predict = self.model(
             log_energy_history, 
@@ -82,6 +90,8 @@ class LightingModel(L.LightningModule):
             es_sem_mask=es_sem_masks,
             gnss_geo_mask=combined_gnss_masks,
             gnss_padding_mask=gnss_paddding_mask,
+            es_loc = earthquake_loaction,
+            gnss_loc = station_loaction
         )
         
         # Compute the loss using the helper function
