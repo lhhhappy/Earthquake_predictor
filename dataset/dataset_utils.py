@@ -11,6 +11,7 @@ from scipy.linalg import eigh
 from torch.nn import functional as F
 from scipy.interpolate import interp1d
 from scipy.signal import savgol_filter
+import copy
 
 def normalize(data, method='min-max'):
     """
@@ -154,6 +155,7 @@ class EarthquakeGNSSDataset(Dataset):
         self.lape_dim = lape_dim
         self.time_resolution = time_resolution
         self.earthquake_location = torch.tensor([earthquake_dict_use[i] for i in sorted(earthquake_dict_use.keys())], dtype=torch.float32)
+
         self.station_location = np.array([station_dict_use[i] for i in sorted(station_dict_use.keys())], dtype=np.float32)
 
         self.earthquake_data_date = earthquake_data.index
@@ -511,6 +513,30 @@ def graph_laplacian_embedding(adj_matrix, k):
 
     return selected_eigenvectors
 
+def normalize_locations(quake_location, station_location):
+    """
+    Normalize latitude and longitude for quake and station locations to range [-1, 1].
+
+    Args:
+    quake_location (torch.Tensor): Tensor of shape (num, 2) for earthquake locations (latitude, longitude).
+    station_location (torch.Tensor): Tensor of shape (num, 2) for station locations (latitude, longitude).
+
+    Returns:
+    torch.Tensor, torch.Tensor: Normalized quake and station locations.
+    """
+    # Clone the input tensors to avoid modifying the original ones
+    normalized_quake_location = quake_location.clone()
+    normalized_station_location = station_location.clone()
+
+    # Normalize quake locations
+    normalized_quake_location[:, 0] = 2 * (normalized_quake_location[:, 0] + 90) / 180 - 1  # Latitude normalization
+    normalized_quake_location[:, 1] = 2 * (normalized_quake_location[:, 1] + 180) / 360 - 1  # Longitude normalization
+
+    # Normalize station locations
+    normalized_station_location[:, 0] = 2 * (normalized_station_location[:, 0] + 90) / 180 - 1  # Latitude normalization
+    normalized_station_location[:, 1] = 2 * (normalized_station_location[:, 1] + 180) / 360 - 1  # Longitude normalization
+
+    return normalized_quake_location, normalized_station_location
 
 def generate_masks(es_geo_matrix, es_sem_matrix, gnss_geo_matrix, geo_percentage=0.3, sem_percentage=0.3):
     """
@@ -602,8 +628,8 @@ class CombinedEarthquakeGNSSDataset(Dataset):
         station_location_list = []
         # 遍历批次中的每个样本，填充 GNSS 数据和掩码以匹配最大节点数
         gnss_padding_mask_list = []
-        for item in batch:
-
+        batch_copy = copy.deepcopy(batch)
+        for item in batch_copy:
             gnss_padding_mask = torch.ones(max_gnss_nodes_in_batch, max_gnss_nodes_in_batch, dtype=torch.bool)
             num_gnss_nodes = item['gnss_data_history'].shape[1]
             pad_gnss_nodes = max_gnss_nodes_in_batch - num_gnss_nodes
@@ -652,11 +678,9 @@ class CombinedEarthquakeGNSSDataset(Dataset):
             earthquake_quake_location = item['earthquake_location']
             station_location = item['station_location']
 
-            #norm
-            earthquake_quake_location[0] = 2*(earthquake_quake_location[:,0]+90)/180-1
-            earthquake_quake_location[1] = 2*(earthquake_quake_location[:,1]+180)/360-1
-            station_location[:,0] = 2*(station_location[:,0]+90)/180-1
-            station_location[:,1] = 2*(station_location[:,1]+180)/360-1
+
+            earthquake_quake_location, station_location = normalize_locations(earthquake_quake_location, station_location)
+
             padded_station_location = F.pad(
                 station_location,
                 pad=(0, 0, 0, pad_gnss_nodes),

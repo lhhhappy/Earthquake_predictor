@@ -3,13 +3,13 @@
 # Set the data path and save directory
 DATA_PATH="/home/linhang/workbench/Earthquake_data/"
 SAVE_DIR="/home/linhang/workbench/workbench/Earthquake_predictor/Result/"
-Experiment_name="ES_net_mixer_without_predict_day"
+Experiment_name="ES_net_mixer_longterm"
 
 LOG_DIR="${SAVE_DIR}logs/${Experiment_name}/"
 
 # Set model parameters as a JSON string
 
-predict_window=14
+predict_window=70
 time_resolution=14
 gnss_history_window=140
 earthquake_history_window_day=700
@@ -56,9 +56,9 @@ python train.py \
     --data-path $DATA_PATH \
     --model-arch "ES_net_mixer" \
     --energy-loss "mse" \
-    --day-loss "cross_entropy" \
-    --batch-size 16 \
-    --val-batch-size 16 \
+    --day-loss "None" \
+    --batch-size 8 \
+    --val-batch-size 8 \
     --max-epochs 100 \
     --device 1 \
     --lr 1e-4 \

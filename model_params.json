@@ -22,5 +22,5 @@
     "enc_depth": 2,
     "type_ln": "pre",
     "prediction_day_head": 0,
-    "prediction_energy_len": 1
+    "prediction_energy_len": 5
 }
