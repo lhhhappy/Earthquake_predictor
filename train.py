@@ -61,9 +61,11 @@ dataset = get_dataset(
 loss_fn = get_loss(energy_loss=args.energy_loss, day_loss=args.day_loss)
 
 # Split dataset into training and validation sets
-train_dataset, val_dataset = torch.utils.data.random_split(
-    dataset, [int(len(dataset) * 0.8), len(dataset) - int(len(dataset) * 0.8)]
-)
+train_size = int(len(dataset) * 0.9)
+val_size = len(dataset) - train_size
+
+# 分割数据集
+train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
 
 # Create DataLoaders for training and validation
 train_loader = DataLoader(

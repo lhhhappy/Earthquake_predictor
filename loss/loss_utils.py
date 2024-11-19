@@ -114,6 +114,7 @@ def get_loss(energy_loss='nse', day_loss='cross_entropy'):
     Returns:
     nn.Module: Loss function.
     """
+    
     loss_fns = {}
     if energy_loss == 'nse':
         loss_fns['energy_loss'] = NSELoss()
@@ -125,6 +126,8 @@ def get_loss(energy_loss='nse', day_loss='cross_entropy'):
         raise ValueError(f"Unknown energy loss function: {energy_loss}")
     if day_loss == 'cross_entropy':
         loss_fns['day_loss'] = CustomCrossEntropyLoss()
+    if day_loss == 'None':
+        loss_fns['day_loss'] = None
     else:
         raise ValueError(f"Unknown day loss function: {day_loss}")
     return loss_fns

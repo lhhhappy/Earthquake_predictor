@@ -13,19 +13,16 @@ class LightingModel(L.LightningModule):
         self.save_hyperparameters(ignore=['loss_fns'])
     
     def compute_loss(self, energy_predict, log_energy_future, day_predict, earthquake_data_future_day):
-        
         total_loss = 0.0
         # Iterate through the loss functions and apply them
-
         for name, loss_fn in self.loss_fns.items():
-            if name == 'energy_loss':
+            if name == 'energy_loss' and loss_fn is not None:
                 loss = loss_fn(energy_predict, log_energy_future)
-            elif name == 'day_loss':
+            elif name == 'day_loss' and loss_fn is not None and day_predict is not None:
                 loss = loss_fn(day_predict, earthquake_data_future_day)
             else:
-                raise ValueError(f"Unknown loss function: {name}")
+                continue
             total_loss += loss
-            # Log each loss component for better monitoring
             self.log(f"{name}", loss, prog_bar=True)
         return total_loss
     
@@ -37,7 +34,7 @@ class LightingModel(L.LightningModule):
         es_geo_masks = batch['es_geo_mask']
         es_sem_masks = batch['es_sem_mask']
         combined_gnss_masks = batch['gnss_geo_mask']
-        lap_ex_masks = batch['lap_ex']  
+        es_lap_masks = batch['lap_ex']  
         lap_gnss_masks = batch['lap_gnss']
         gnss_paddding_mask = batch['gnss_padding_mask']
         earthquake_loaction = batch['earthquake_location']
@@ -47,7 +44,7 @@ class LightingModel(L.LightningModule):
         energy_predict, day_predict = self.model(
             log_energy_history, 
             gnss_data_history, 
-            lap_mx=lap_ex_masks,
+            es_lap_mx=es_lap_masks,
             gnss_lap_mx=lap_gnss_masks,
             es_geo_mask=es_geo_masks,
             es_sem_mask=es_sem_masks,
@@ -74,17 +71,16 @@ class LightingModel(L.LightningModule):
         es_geo_masks = batch['es_geo_mask']
         es_sem_masks = batch['es_sem_mask']
         combined_gnss_masks = batch['gnss_geo_mask']
-        lap_ex_masks = batch['lap_ex']  
+        es_lap_masks = batch['lap_ex']  
         lap_gnss_masks = batch['lap_gnss']
         gnss_paddding_mask = batch['gnss_padding_mask']
         earthquake_loaction = batch['earthquake_location']
         station_loaction = batch['station_location']
 
-        # Forward pass through the model
         energy_predict, day_predict = self.model(
             log_energy_history, 
             gnss_data_history, 
-            lap_mx=lap_ex_masks,
+            es_lap_mx=es_lap_masks,
             gnss_lap_mx=lap_gnss_masks,
             es_geo_mask=es_geo_masks,
             es_sem_mask=es_sem_masks,

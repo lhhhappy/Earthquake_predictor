@@ -12,57 +12,50 @@ from torch.nn import functional as F
 from scipy.interpolate import interp1d
 from scipy.signal import savgol_filter
 
-def normalize_gnss(array_3d, method='min-max'):
+def normalize(data, method='min-max'):
     """
-    对三维数组进行归一化，支持多种归一化方法。
+    Normalize the input data independently for each N and C using vectorized operations.
     
-    参数：
-    - array_3d: 输入的三维数组，形状为 (时间步, 特征, 通道)。
-    - method: 归一化方法，支持 'min-max', 'z-score', 'max-abs'。
-    
-    返回：
-    - 归一化后的三维数组，形状与输入相同。
+    Parameters:
+        data (np.ndarray): Input data of shape (T, N, C).
+        method (str): Normalization method. Options are 'z-score', 'min-max', 'max'.
+        
+    Returns:
+        np.ndarray: Normalized data with the same shape as the input.
     """
-    # 创建一个布尔掩码，标记有效的数据（非NaN的行）
-    mask = ~np.isnan(array_3d).any(axis=2)  # (时间步, 特征)，标记有效行
-
-    # 初始化一个与 array_3d 相同形状的归一化结果数组
-    normalized_array = np.copy(array_3d)
+    if not isinstance(data, np.ndarray):
+        raise ValueError("Input data must be a numpy array.")
+    if data.ndim != 3:
+        raise ValueError("Input data must have 3 dimensions: (T, N, C).")
     
-    if method == 'min-max':
-        # Min-Max 归一化，将值缩放到 [0, 1]
-        min_vals = np.nanmin(np.where(mask[:, :, None], array_3d, np.nan), axis=0)  # (特征, 通道)
-        max_vals = np.nanmax(np.where(mask[:, :, None], array_3d, np.nan), axis=0)  # (特征, 通道)
-        
-        range_vals = max_vals - min_vals
-        range_vals[range_vals == 0] = 1  # 避免分母为零
+    if method == 'z-score':
+        # Compute mean and std along the T dimension, keep dimensions for broadcasting
+        mean = np.mean(data, axis=0, keepdims=True)
+        std = np.std(data, axis=0, keepdims=True)
+        # Avoid division by zero
+        std = np.where(std == 0, 1, std)
+        normalized_data = (data - mean) / std
 
-        normalized_array = (array_3d - min_vals) / range_vals
-    
-    elif method == 'z-score':
-        # Z-score 标准化，使得均值为 0，标准差为 1
-        mean_vals = np.nanmean(np.where(mask[:, :, None], array_3d, np.nan), axis=0)  # (特征, 通道)
-        std_vals = np.nanstd(np.where(mask[:, :, None], array_3d, np.nan), axis=0)    # (特征, 通道)
-        
-        std_vals[std_vals == 0] = 1  # 避免分母为零
+    elif method == 'min-max':
+        # Compute min and max along the T dimension
+        min_val = np.min(data, axis=0, keepdims=True)
+        max_val = np.max(data, axis=0, keepdims=True)
+        # Avoid division by zero
+        range_val = max_val - min_val
+        range_val = np.where(range_val == 0, 1, range_val)
+        normalized_data = (data - min_val) / range_val
 
-        normalized_array = (array_3d - mean_vals) / std_vals
-    
-    elif method == 'max-abs':
-        # 最大绝对���归一化，将值缩放到 [-1, 1]
-        max_abs_vals = np.nanmax(np.abs(np.where(mask[:, :, None], array_3d, np.nan)), axis=0)  # (特征, 通道)
-        
-        max_abs_vals[max_abs_vals == 0] = 1  # 避免分母为零
+    elif method == 'max':
+        # Compute max along the T dimension
+        max_val = np.max(data, axis=0, keepdims=True)
+        # Avoid division by zero
+        max_val = np.where(max_val == 0, 1, max_val)
+        normalized_data = data / max_val
 
-        normalized_array = array_3d / max_abs_vals
-    
     else:
-        raise ValueError("Unsupported normalization method. Choose from 'min-max', 'z-score', 'max-abs'.")
+        raise ValueError(f"Unknown normalization method: {method}")
 
-    normalized_array[~mask] = np.nan
-    
-    return normalized_array
-
+    return normalized_data
 def dataframe_to_array(df):
     df_filled = df.apply(lambda col: col.map(lambda x: x if isinstance(x, list) and len(x) == 4 else [np.nan] * 4))
     array_3d = np.array(df_filled.values.tolist()).reshape(df.shape[0], df.shape[1], 4)
@@ -153,7 +146,6 @@ class EarthquakeGNSSDataset(Dataset):
         """
         self.area = area
         self.earthquake_data = earthquake_data
-        self.gnss_data = gnss_data
         self.window_size = window_size
         self.forecast_horizon = forecast_horizon
         self.earthquake_threshold = earthquake_threshold
@@ -161,19 +153,19 @@ class EarthquakeGNSSDataset(Dataset):
         self.missing_threshold = missing_threshold
         self.lape_dim = lape_dim
         self.time_resolution = time_resolution
-        self.earthquake_loaction = torch.tensor([earthquake_dict_use[i] for i in sorted(earthquake_dict_use.keys())])
-        self.station_loaction = np.array([station_dict_use[i] for i in sorted(station_dict_use.keys())], dtype=np.float32)
+        self.earthquake_location = torch.tensor([earthquake_dict_use[i] for i in sorted(earthquake_dict_use.keys())], dtype=torch.float32)
+        self.station_location = np.array([station_dict_use[i] for i in sorted(station_dict_use.keys())], dtype=np.float32)
 
         self.earthquake_data_date = earthquake_data.index
         self.gnss_data_date = gnss_data.index
 
-        self.normalized_gnss_data = normalize_gnss(dataframe_to_array(gnss_data), method='min-max')
+        self.gnss_data = dataframe_to_array(gnss_data)
 
         # 生成掩码
         self.es_geo_mask, self.es_sem_mask, self.gnss_geo_mask = generate_masks(
             es_geo_matrix, es_sem_matrix, gnss_geo_matrix, geo_percentage, sem_percentage
         )
-        self.start_index = self.find_first_valid_index(self.normalized_gnss_data)
+        self.start_index = self.find_first_valid_index(self.gnss_data)
 
         # 设置起始时间索引
         start_day = pd.Timestamp(gnss_data.index[self.start_index].date())
@@ -206,27 +198,32 @@ class EarthquakeGNSSDataset(Dataset):
         ]
 
         # 获取GNSS历史数据并转置以匹配期望的维度
-        gnss_data_history = self.normalized_gnss_data[
+        gnss_data_history = self.gnss_data[
             idx + self.start_index:idx + self.window_size + self.start_index
         ].transpose(1, 0, 2)
 
-        earthquake_data_history_date = self.earthquake_data_date[
-            max(0, self.earthquake_start_index + self.window_size + idx - self.earthquake_window):
-            self.earthquake_start_index + self.window_size + idx
-        ]
-        earthquake_data_future_date = self.earthquake_data_date[
-            self.earthquake_start_index + self.window_size + idx:
-            self.earthquake_start_index + self.window_size + idx + self.forecast_horizon
-        ]
-        gnss_data_history_date = self.gnss_data_date[
-            idx + self.start_index:idx + self.window_size + self.start_index
-        ]
+        
+        
+        # earthquake_data_history_date = self.earthquake_data_date[
+        #     max(0, self.earthquake_start_index + self.window_size + idx - self.earthquake_window):
+        #     self.earthquake_start_index + self.window_size + idx
+        # ]
+
+        # earthquake_data_future_date = self.earthquake_data_date[
+        #     self.earthquake_start_index + self.window_size + idx:
+        #     self.earthquake_start_index + self.window_size + idx + self.forecast_horizon
+        # ]
+
+        # gnss_data_history_date = self.gnss_data_date[
+        #     idx + self.start_index:idx + self.window_size + self.start_index
+        # ]
         # print("earthquake_start",earthquake_data_history_date[0])
         # print("earthquake_end",earthquake_data_history_date[-1])
         # print("gnss_start",gnss_data_history_date[0])
         # print("gnss_end",gnss_data_history_date[-1])
         # print("earthquake_future_start",earthquake_data_future_date[0])
         # print("earthquake_future_end",earthquake_data_future_date[-1]) 
+
         
         earthquake_happen = torch.tensor((earthquake_data_future >= self.earthquake_threshold).any(axis=0).to_numpy(), dtype=torch.bool)
 
@@ -246,7 +243,7 @@ class EarthquakeGNSSDataset(Dataset):
 
         # 更新gnss_data_history和gnss_geo_mask
         gnss_data_history = gnss_data_history[stations_to_keep]
-        station_location_use = self.station_loaction[stations_to_keep]
+        station_location_use = self.station_location[stations_to_keep]
 
         sample_gnss_geo_mask = self.gnss_geo_mask[np.ix_(stations_to_keep, stations_to_keep)]
 
@@ -256,7 +253,9 @@ class EarthquakeGNSSDataset(Dataset):
         # 填充缺失值
         gnss_data_history = fill_nan_with_interpolation(gnss_data_history).transpose(1, 0, 2)
 
-        gnss_trend_filtered = apply_filter_to_all_nodes(gnss_data_history, window_length=9, polyorder=3)
+        gnss_data_history = normalize(gnss_data_history, method='min-max')
+        
+        gnss_trend_filtered = apply_filter_to_all_nodes(gnss_data_history, window_length = 21 , polyorder=3)
         gnss_seasonal_component = gnss_data_history - gnss_trend_filtered
         
         gnss_data_history = np.concatenate([gnss_trend_filtered, gnss_seasonal_component], axis=2)
@@ -282,8 +281,8 @@ class EarthquakeGNSSDataset(Dataset):
             'lap_ex': self.lap_ex,
             'lap_gnss': sample_lap_gnss,
             "earthquake_happen":earthquake_happen,
-            "earthquake_loaction":self.earthquake_loaction,
-            "station_loaction":station_location_use
+            "earthquake_location":self.earthquake_location,
+            "station_location":station_location_use
         }
     def find_first_valid_index(self, gnss_data):
         """
@@ -512,7 +511,6 @@ def graph_laplacian_embedding(adj_matrix, k):
 
     return selected_eigenvectors
 
-import torch
 
 def generate_masks(es_geo_matrix, es_sem_matrix, gnss_geo_matrix, geo_percentage=0.3, sem_percentage=0.3):
     """
@@ -600,8 +598,8 @@ class CombinedEarthquakeGNSSDataset(Dataset):
         lap_ex_list = []
         lap_gnss_list = []
         earthquake_happen_list = []
-        earthquake_loaction_list = []
-        station_loaction_list = []
+        earthquake_location_list = []
+        station_location_list = []
         # 遍历批次中的每个样本，填充 GNSS 数据和掩码以匹配最大节点数
         gnss_padding_mask_list = []
         for item in batch:
@@ -651,11 +649,16 @@ class CombinedEarthquakeGNSSDataset(Dataset):
             # 填充 es_geo_mask 和 es_sem_mask，使其形状一致
             es_geo_mask = item['es_geo_mask']
             es_sem_mask = item['es_sem_mask']
-            earthquake_quake_loaction = item['earthquake_loaction']
-            station_loaction = item['station_loaction']
+            earthquake_quake_location = item['earthquake_location']
+            station_location = item['station_location']
 
-            padded_station_loaction = F.pad(
-                station_loaction,
+            #norm
+            earthquake_quake_location[0] = 2*(earthquake_quake_location[:,0]+90)/180-1
+            earthquake_quake_location[1] = 2*(earthquake_quake_location[:,1]+180)/360-1
+            station_location[:,0] = 2*(station_location[:,0]+90)/180-1
+            station_location[:,1] = 2*(station_location[:,1]+180)/360-1
+            padded_station_location = F.pad(
+                station_location,
                 pad=(0, 0, 0, pad_gnss_nodes),
                 mode='constant',
                 value=0
@@ -670,8 +673,8 @@ class CombinedEarthquakeGNSSDataset(Dataset):
             lap_gnss_list.append(padded_lap_gnss)
             earthquake_happen_list.append(item['earthquake_happen'])
             gnss_padding_mask_list.append(gnss_padding_mask)
-            earthquake_loaction_list.append(earthquake_quake_loaction)
-            station_loaction_list.append(padded_station_loaction)
+            earthquake_location_list.append(earthquake_quake_location)
+            station_location_list.append(padded_station_location)
         
         log_energy_history = torch.stack(log_energy_history_list)
         gnss_data_history = torch.stack(gnss_data_history_list)
@@ -685,8 +688,8 @@ class CombinedEarthquakeGNSSDataset(Dataset):
         lap_gnss = torch.stack(lap_gnss_list)
         earthquake_happen = torch.stack(earthquake_happen_list)
         gnss_padding_mask = torch.stack(gnss_padding_mask_list)
-        earthquake_loaction = torch.stack(earthquake_loaction_list)
-        station_loaction = torch.stack(station_loaction_list)
+        earthquake_location = torch.stack(earthquake_location_list)
+        station_location = torch.stack(station_location_list)
 
         # 组合成字典
         batch_data = {
@@ -701,8 +704,8 @@ class CombinedEarthquakeGNSSDataset(Dataset):
             'lap_gnss': lap_gnss,
             'earthquake_happen':earthquake_happen,
             'gnss_padding_mask': gnss_padding_mask,
-            'earthquake_loaction':earthquake_loaction,
-            'station_loaction':station_loaction
+            'earthquake_location':earthquake_location,
+            'station_location':station_location
         }
 
         return batch_data

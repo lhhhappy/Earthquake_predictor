@@ -6,7 +6,7 @@ import pandas as pd
 # 参数设置
 earthquake_start_year = 1980
 station_start_year = 2000
-end_year = 2024
+end_year = 2022
 
 #latmin, latmax, lonmin, lonmax
 #     

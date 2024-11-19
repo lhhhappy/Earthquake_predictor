@@ -1,9 +1,12 @@
 import torch
 import torch.nn as nn   
 import math
+import numpy as np
 import torch.nn.functional as F
+import torch.nn.init as init
 from functools import partial
-
+from logging import getLogger
+import os
 
 class moving_avg(nn.Module):
     """
@@ -28,22 +31,6 @@ class moving_avg(nn.Module):
 
         x = x.view(B, N, C, -1).permute(0, 3, 1, 2).contiguous()
         return x
-    
-
-class series_decomp(nn.Module):
-    """
-    Series decomposition block
-    """
-
-    def __init__(self, kernel_size):
-        super(series_decomp, self).__init__()
-        self.moving_avg = moving_avg(kernel_size, stride=1)
-
-    def forward(self, x):
-        moving_mean = self.moving_avg(x)
-        res = x - moving_mean
-        return res, moving_mean
-    
 class TokenEmbedding(nn.Module):
     def __init__(self, input_dim, embed_dim, norm_layer=None):
         super().__init__()
@@ -127,8 +114,6 @@ class DataEmbedding(nn.Module):
         x += self.location_embedding(loc)
         x = self.dropout(x)
         return x
-
-
 class MultiResolutionTimeDownsampling(nn.Module):
     def __init__(self, down_sampling_method='avg', down_sampling_window=2, down_sampling_layers=3):
         super(MultiResolutionTimeDownsampling, self).__init__()
@@ -173,7 +158,7 @@ class MultiResolutionTimeDownsampling(nn.Module):
             T = T_new
 
         return outputs
-    
+
 
 class MultiScaleSeasonMixing(nn.Module):
     """
@@ -271,17 +256,15 @@ class MultiScaleTrendMixing(nn.Module):
         out_trend_list = [x.permute(0, 3, 2, 1).contiguous() for x in out_trend_list]
         return out_trend_list
     
-
 class PastDecomposableMixing(nn.Module):
     def __init__(self, seq_len, down_sampling_window, d_model, d_ff, dropout, decomp_method='moving_avg', 
-                 moving_avg_kernel=3, top_k=5, channel_independence=0, down_sampling_layers=3):
+                 moving_avg_kernel=3, top_k=5, down_sampling_layers=3):
         super(PastDecomposableMixing, self).__init__()
         self.seq_len = seq_len
         self.down_sampling_window = down_sampling_window
         self.d_model = d_model
         self.d_ff = d_ff
         self.dropout = dropout
-        self.channel_independence = channel_independence
 
         # Layer normalization and dropout
         self.layer_norm = nn.LayerNorm(d_model)
@@ -294,12 +277,11 @@ class PastDecomposableMixing(nn.Module):
             raise ValueError("Invalid decomposition method")
 
         # Cross layer only used if channel independence is disabled
-        if channel_independence == 0:
-            self.cross_layer = nn.Sequential(
-                nn.Linear(in_features=d_model, out_features=d_ff),
-                nn.GELU(),
-                nn.Linear(in_features=d_ff, out_features=d_model),
-            )
+        self.cross_layer = nn.Sequential(
+            nn.Linear(in_features=d_model, out_features=d_ff),
+            nn.GELU(),
+            nn.Linear(in_features=d_ff, out_features=d_model),
+        )
 
         # Multi-scale mixing modules for season and trend
         self.mixing_multi_scale_season = MultiScaleSeasonMixing(seq_len, down_sampling_window, d_model, d_ff, down_sampling_layers)
@@ -324,9 +306,8 @@ class PastDecomposableMixing(nn.Module):
 
             season, trend = self.decomposition(x)  # Decompose x to get season and trend components
 
-            if self.channel_independence == 0:
-                season = self.cross_layer(season.permute(0, 3, 2, 1))  # Restore to [B, T, N, C]
-                trend = self.cross_layer(trend.permute(0, 3, 2, 1))  # Same adjustment
+            season = self.cross_layer(season.permute(0, 3, 2, 1))  # Restore to [B, T, N, C]
+            trend = self.cross_layer(trend.permute(0, 3, 2, 1))  # Same adjustment
 
             season_list.append(season.permute(0, 3, 2, 1))  # Convert back to [B, T, N, C]
             trend_list.append(trend.permute(0, 3, 2, 1))  # Same
@@ -340,12 +321,10 @@ class PastDecomposableMixing(nn.Module):
         out_list = []
         for ori, out_season, out_trend, length in zip(x_list, out_season_list, out_trend_list, length_list):
             out = out_season + out_trend
-            if self.channel_independence:
-                out = ori + self.out_cross_layer(out)
+            out = ori + self.out_cross_layer(out)
             out_list.append(out[:, :length, :, :])  # Truncate to the original length
 
         return out_list
-    
 
 class NodeSelfAttention(nn.Module):
     def __init__(
@@ -428,7 +407,6 @@ class NodeSelfAttention(nn.Module):
         x = self.proj_drop(x)
         x = self.layernorm(original_x + x)
         return x
-    
 class NodeAttentionBlock(nn.Module):
     def __init__(self, dim, geo_num_heads=4, sem_num_heads=2, qkv_bias=False,
                  attn_drop=0., proj_drop=0.,down_sampling_layers=2):
@@ -442,8 +420,6 @@ class NodeAttentionBlock(nn.Module):
         for x, attn in zip(x_list, self.nodeattn):
             out_list.append(attn(x, geo_mask, sem_mask, padding_mask))
         return out_list
-
-
 class TemporalConvCompression(nn.Module):
     def __init__(self, input_dim, output_dim, kernel_size):
         super(TemporalConvCompression, self).__init__()
@@ -507,7 +483,6 @@ class MultiScaleFusionModule(nn.Module):
         output = self.output_layer(fused_feature)  # [B, N, output_dim]
         
         return output
-    
 class Mlp(nn.Module):
     def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
         super().__init__()
@@ -627,6 +602,9 @@ class STEncoderBlock(nn.Module):
             x = self.norm2(x + self.drop_path(self.mlp(x)))
         return x
 
+import torch
+import torch.nn.functional as F
+
 class CustomCrossAttentionNetwork(torch.nn.Module):
     def __init__(self, d_model):
         super(CustomCrossAttentionNetwork, self).__init__()
@@ -670,6 +648,39 @@ class CustomCrossAttentionNetwork(torch.nn.Module):
 
         output = attn_output + enc1_residual  # Adding original enc1
         return output
+
+class RevIN(nn.Module):
+    def __init__(self, num_features, eps=1e-5, affine=True):
+        super(RevIN, self).__init__()
+        self.num_features = num_features  # Number of feature channels (C)
+        self.eps = eps
+        self.affine = affine
+        if self.affine:
+            # Parameters for scaling and shifting
+            self.gamma = nn.Parameter(torch.ones(1, 1, 1, num_features))
+            self.beta = nn.Parameter(torch.zeros(1, 1, 1, num_features))
+        else:
+            self.register_parameter('gamma', None)
+            self.register_parameter('beta', None)
+
+    def forward(self, x, mode):
+        if mode == 'norm':
+            # Compute mean and std over T for each (B, N, C)
+            self.mean = x.mean(dim=1, keepdim=True).detach()
+            self.std = x.std(dim=1, keepdim=True, unbiased=False).detach()
+            # Normalize
+            x = (x - self.mean) / (self.std + self.eps)
+            if self.affine:
+                x = x * self.gamma + self.beta
+            return x
+        elif mode == 'denorm':
+            # Denormalize
+            if self.affine:
+                x = (x - self.beta) / (self.gamma + self.eps)
+            x = x * (self.std + self.eps) + self.mean
+            return x
+        else:
+            raise ValueError("Mode must be 'norm' or 'denorm'")
     
 
 class ES_net_mixer(nn.Module):
@@ -678,8 +689,7 @@ class ES_net_mixer(nn.Module):
                  pdm_layers=2, pdm_d_model=64, pdm_d_ff=128, 
                  pdm_dropout=0.1, pdm_decomp_method='moving_avg', pdm_moving_avg_kernel=3, 
                  geo_num_heads=4, sem_num_heads=4, qkv_bias=False, attn_drop=0., proj_drop=0.,
-                 ml_ratio=4., enc_depth=2,type_ln="pre",prediction_day_head=1,prediction_energy_len = 1,
-                 channel_independence=0):
+                 mlp_ratio=4., enc_depth=2,type_ln="pre", prediction_day_head=1 , prediction_energy_len = 1):
         super(ES_net_mixer, self).__init__()
         
         self.earthquake_dim = earthquake_dim
@@ -694,7 +704,7 @@ class ES_net_mixer(nn.Module):
         self.qkv_bias = qkv_bias
         self.attn_drop = attn_drop
         self.proj_drop = proj_drop
-        self.mlp_ratio = ml_ratio
+        self.mlp_ratio = mlp_ratio
         self.type_ln = type_ln
         self.enc_depth = enc_depth
         self.pdm_d_model = pdm_d_model
@@ -702,7 +712,6 @@ class ES_net_mixer(nn.Module):
         self.pdm_dropout = pdm_dropout
         self.pdm_decomp_method = pdm_decomp_method
         self.pdm_moving_avg_kernel = pdm_moving_avg_kernel
-        self.channel_independence = channel_independence
         self.geo_num_heads = geo_num_heads
         self.sem_num_heads = sem_num_heads
         self.prediction_day_head = prediction_day_head
@@ -735,7 +744,6 @@ class ES_net_mixer(nn.Module):
                 dropout=self.pdm_dropout, 
                 decomp_method=self.pdm_decomp_method, 
                 moving_avg_kernel=self.pdm_moving_avg_kernel, 
-                channel_independence=self.channel_independence
             ) 
             for _ in range(self.pdm_layers)
         ])
@@ -786,25 +794,44 @@ class ES_net_mixer(nn.Module):
         )
         
         self.cross_attention_network = CustomCrossAttentionNetwork(d_model=self.pdm_d_model)
-        self.predict_energy_head = Mlp(in_features=self.pdm_d_model, hidden_features=self.pdm_d_model, 
-                                       out_features=self.predict_energy_len)
-        self.predict_day_head = Mlp(in_features=self.pdm_d_model, hidden_features=self.pdm_d_model, 
-                                    out_features=self.prediction_day_head)
+        
+        if self.prediction_day_head != 0:
+            self.predict_day_head = Mlp(in_features=self.pdm_d_model, hidden_features=self.pdm_d_model, 
+                                        out_features=self.prediction_day_head)
+            
+        self.predict_energy_head = Mlp(in_features=self.pdm_d_model, hidden_features=self.pdm_d_model,
+                                        out_features=self.predict_energy_len)
 
-    def forward(self, earthquake, gnss_data, es_loc=None, gnss_loc=None, es_lap_mx=None, gnss_lap_mx = None, es_geo_mask=None, es_sem_mask=None, padding_mask=None,gnss_geo_mask=None):
+        self.predict_layers = torch.nn.ModuleList(
+            [
+                torch.nn.Linear(
+                    self.pdm_seq_len // (self.down_sampling_window ** i),
+                    self.pdm_d_model,
+                )
+                for i in range(self.down_sampling_layers + 1)
+            ]
+            )       
+        self.projection_layer = nn.Linear(self.pdm_d_model, 1,bias=True)
+
+    def forward(self, earthquake, gnss_data, es_loc=None, gnss_loc=None, es_lap_mx=None, gnss_lap_mx = None, es_geo_mask=None, es_sem_mask=None, gnss_padding_mask=None,gnss_geo_mask=None):
+        B, T, N, C = earthquake.size()
         # Earthquake data embedding
         earthquake_list = self.multi_resolution_time_downsampling(earthquake)
-        print("Downsampling shapes:", [o.shape for o in earthquake_list])
+
         earthquake_enc_list = []
         for i in range(len(earthquake_list)):
             earthquake_enc = self.earthquake_embedding(earthquake_list[i], es_lap_mx, es_loc)
+            
             earthquake_enc_list.append(earthquake_enc)
         # Apply PDM blocks to the multi-resolution earthquake encodings
         for i in range(len(self.pdm_blocks)):
             earthquake_enc_list = self.pdm_blocks[i](earthquake_enc_list)
-            earthquake_enc_list = self.node_self_attention_block[i](earthquake_enc_list, es_geo_mask, es_sem_mask, padding_mask)
-        earthquake_enc = self.multi_scale_fusion_module(earthquake_enc_list)
+            earthquake_enc_list = self.node_self_attention_block[i](earthquake_enc_list, es_geo_mask, es_sem_mask, padding_mask = None)
+        # earthquake_enc = self.multi_scale_fusion_module(earthquake_enc_list)
 
+        earthquake_enc = self.future_multi_mixing(B, earthquake_enc_list, earthquake_list)
+
+        earthquake_enc = torch.stack(earthquake_enc, dim=-1).sum(-1)
         # GNSS data embedding
         gnss_trend = gnss_data[:,:,:,:self.gnss_dim]
         gnss_season = gnss_data[:,:,:,self.gnss_dim:]
@@ -813,26 +840,61 @@ class ES_net_mixer(nn.Module):
 
         gnss_trend_enc = 0
         for i, encoder_block in enumerate(self.encoder_blocks_trend):
-            gnss_trend = encoder_block(gnss_trend, gnss_geo_mask, padding_mask = padding_mask)
+            gnss_trend = encoder_block(gnss_trend, gnss_geo_mask, padding_mask = gnss_padding_mask)
             gnss_trend_enc += self.skip_convs_trend[i](gnss_trend.permute(0, 3, 2, 1))
         gnss_trend_enc = gnss_trend_enc.permute(0, 3, 2, 1)
 
         gnss_season_enc = 0
         for i, encoder_block in enumerate(self.encoder_blocks_season):
-            gnss_season = encoder_block(gnss_season, gnss_geo_mask, padding_mask = padding_mask)
+            gnss_season = encoder_block(gnss_season, gnss_geo_mask, padding_mask = gnss_padding_mask)
             gnss_season_enc += self.skip_convs_season[i](gnss_season.permute(0, 3, 2, 1))
         gnss_season_enc = gnss_season_enc.permute(0, 3, 2, 1)
 
         gnss_enc = self.gnss_compression(self.layernorm(gnss_season_enc + gnss_trend_enc))
         
-        # Cross-attention between earthquake and GNSS data
+        #Cross-attention between earthquake and GNSS data
         ENC = self.cross_attention_network(earthquake_enc, gnss_enc)
 
         energy = self.predict_energy_head(ENC)
-        day = self.predict_day_head(ENC)
+        
+        if self.prediction_day_head != 0:
+            day = self.predict_day_head(ENC)
+        else:
+            day = None
+
         return energy, day
+    
+    def future_multi_mixing(self, B, enc_out_list, x_list):
+        
+        dec_out_list = []
+        
+        for i, enc_out in zip(range(len(x_list)), enc_out_list):
+            
+            dec_out = self.predict_layers[i](enc_out.permute(0, 2, 3, 1)).permute(0, 3, 1, 2).contiguous()
+
+            dec_out = self.projection_layer(dec_out)
+            dec_out = dec_out.squeeze(-1).permute(0, 2, 1)
+            dec_out_list.append(dec_out)
+
+        return dec_out_list
+
 
         
+    
+class series_decomp(nn.Module):
+    """
+    Series decomposition block
+    """
+
+    def __init__(self, kernel_size):
+        super(series_decomp, self).__init__()
+        self.moving_avg = moving_avg(kernel_size, stride=1)
+
+    def forward(self, x):
+        moving_mean = self.moving_avg(x)
+        res = x - moving_mean
+        return res, moving_mean
+    
 if __name__ == "__main__":
     batch_size = 2
     input_window = 1400
@@ -850,18 +912,16 @@ if __name__ == "__main__":
     es_lap_mx = torch.randn(batch_size,num_nodes, lape_dim)
     es_loc = torch.randn(batch_size,num_nodes, 2)
     gnss_loc = torch.randn(batch_size,gnss_station_num, 2)
-    geo_mask = torch.randn(batch_size, num_nodes, num_nodes)
-    sem_mask = torch.randn(batch_size, num_nodes, num_nodes)
+    geo_mask = torch.zeros(batch_size, num_nodes, num_nodes).bool()
+    sem_mask = torch.zeros(batch_size, num_nodes, num_nodes).bool()
     gnss_lap_mx = torch.randn(batch_size,gnss_station_num, lape_dim)
-    gnss_geo_mask = torch.randn(batch_size, gnss_station_num, gnss_station_num)
+    gnss_geo_mask = torch.zeros(batch_size, gnss_station_num, gnss_station_num).bool()
 
-    model = ES_net_mixer(earthquake_dim=feature_dim, gnss_dim=feature_dim, embed_dim=embed_dim, lape_dim=lape_dim, gnss_history_window=140,earthquake_history_window=1400,
+    model = ES_net_mixer(earthquake_dim=feature_dim, gnss_dim=feature_dim, embed_dim=embed_dim, lape_dim=lape_dim,earthquake_history_window=1400,
                         down_sampling_method='avg', down_sampling_window=2, down_sampling_layers=3, 
                     pdm_layers=2, pdm_d_model=64, pdm_d_ff=128, 
                     pdm_dropout=0.1, pdm_decomp_method='moving_avg', pdm_moving_avg_kernel=3, 
                     geo_num_heads=4, sem_num_heads=4, qkv_bias=False, attn_drop=0., proj_drop=0.,
-                    ml_ratio=4., enc_depth=2,type_ln="pre",prediction_day_head=15,
-                    channel_independence=0)
-
-    energy, day = model(earthquake=x, gnss_data=gnss_data, es_loc=es_loc, gnss_loc=gnss_loc, es_lap_mx=es_lap_mx, gnss_lap_mx=gnss_lap_mx, es_geo_mask=geo_mask, es_sem_mask=sem_mask, padding_mask=None,gnss_geo_mask=gnss_geo_mask)
-
+                    mlp_ratio=4., enc_depth=2,type_ln="pre",prediction_day_head=15,prediction_energy_len=240)
+    energy, day = model(earthquake=x, gnss_data=gnss_data, es_loc=es_loc, gnss_loc=gnss_loc, es_lap_mx=es_lap_mx, gnss_lap_mx=gnss_lap_mx, es_geo_mask=geo_mask, es_sem_mask=sem_mask, gnss_padding_mask=None,gnss_geo_mask=gnss_geo_mask)
+    print(energy.shape, day.shape)
