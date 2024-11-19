@@ -1,18 +1,21 @@
 #!/bin/bash
 
 # Set the data path and save directory
-DATA_PATH="/home/linhang/workbench/Earthquake_data/"
-SAVE_DIR="/home/linhang/workbench/workbench/Earthquake_predictor/Result/"
-Experiment_name="ES_net_mixer_longterm"
+Experiment_name="ES_net_mixer_longterm_california"
 
-LOG_DIR="${SAVE_DIR}logs/${Experiment_name}/"
+DATA_PATH="/home/linhang/workbench/Earthquake_data/"
+
+SAVE_DIR="/home/linhang/workbench/workbench/Earthquake_predictor/Result/"
+
+LOG_DIR="${SAVE_DIR}${Experiment_name}/logs"
+MODEL_DIR="${SAVE_DIR}${Experiment_name}/checkpoints"
 
 # Set model parameters as a JSON string
 
-predict_window=70
+predict_window=14
 time_resolution=14
 gnss_history_window=140
-earthquake_history_window_day=700
+earthquake_history_window_day=1400
 pdm_d_model=128
 dropout=0.1
 
@@ -57,12 +60,12 @@ python train.py \
     --model-arch "ES_net_mixer" \
     --energy-loss "mse" \
     --day-loss "None" \
-    --batch-size 8 \
-    --val-batch-size 8 \
+    --batch-size 4 \
+    --val-batch-size 4 \
     --max-epochs 100 \
     --device 1 \
     --lr 1e-4 \
-    --save-dir $SAVE_DIR \
+    --save-dir $MODEL_DIR \
     --log-dir $LOG_DIR \
     --model_params "model_params.json" \
     --history-window $gnss_history_window \

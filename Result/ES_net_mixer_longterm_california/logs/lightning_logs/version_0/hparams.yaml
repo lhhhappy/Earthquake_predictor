@@ -3,7 +3,7 @@ down_sampling_layers: 3
 down_sampling_method: avg
 down_sampling_window: 2
 earthquake_dim: 1
-earthquake_history_window: 50
+earthquake_history_window: 100
 embed_dim: 128
 enc_depth: 2
 geo_num_heads: 2

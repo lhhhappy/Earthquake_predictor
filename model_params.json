@@ -3,7 +3,7 @@
     "gnss_dim": 4,
     "embed_dim": 128,
     "lape_dim": 30,
-    "earthquake_history_window": 50,
+    "earthquake_history_window": 100,
     "down_sampling_method": "avg",
     "down_sampling_window": 2,
     "down_sampling_layers": 3,
@@ -22,5 +22,5 @@
     "enc_depth": 2,
     "type_ln": "pre",
     "prediction_day_head": 0,
-    "prediction_energy_len": 5
+    "prediction_energy_len": 1
 }

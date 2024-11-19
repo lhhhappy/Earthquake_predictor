@@ -206,27 +206,20 @@ class EarthquakeGNSSDataset(Dataset):
 
         
         
-        # earthquake_data_history_date = self.earthquake_data_date[
-        #     max(0, self.earthquake_start_index + self.window_size + idx - self.earthquake_window):
-        #     self.earthquake_start_index + self.window_size + idx
-        # ]
+        earthquake_data_history_date = self.earthquake_data_date[
+            max(0, self.earthquake_start_index + self.window_size + idx - self.earthquake_window):
+            self.earthquake_start_index + self.window_size + idx
+        ]
 
-        # earthquake_data_future_date = self.earthquake_data_date[
-        #     self.earthquake_start_index + self.window_size + idx:
-        #     self.earthquake_start_index + self.window_size + idx + self.forecast_horizon
-        # ]
+        earthquake_data_future_date = self.earthquake_data_date[
+            self.earthquake_start_index + self.window_size + idx:
+            self.earthquake_start_index + self.window_size + idx + self.forecast_horizon
+        ]
 
-        # gnss_data_history_date = self.gnss_data_date[
-        #     idx + self.start_index:idx + self.window_size + self.start_index
-        # ]
-        # print("earthquake_start",earthquake_data_history_date[0])
-        # print("earthquake_end",earthquake_data_history_date[-1])
-        # print("gnss_start",gnss_data_history_date[0])
-        # print("gnss_end",gnss_data_history_date[-1])
-        # print("earthquake_future_start",earthquake_data_future_date[0])
-        # print("earthquake_future_end",earthquake_data_future_date[-1]) 
-
-        
+        gnss_data_history_date = self.gnss_data_date[
+            idx + self.start_index:idx + self.window_size + self.start_index
+        ]
+                
         earthquake_happen = torch.tensor((earthquake_data_future >= self.earthquake_threshold).any(axis=0).to_numpy(), dtype=torch.bool)
 
         # 计算历史和未来的对数能量
@@ -748,19 +741,20 @@ def get_dataset(data_dir,window_size,forecast_horizon,lape_dim,geo_percentage,se
     area_list = os.listdir(data_dir)
     dataset_dict = {}
     for area in area_list:
-        data_path = data_dir+area+"/"
-        gnss_data = pd.read_csv(data_path + "gnss_data.csv", index_col=0, parse_dates=True, low_memory=False).map(parse_str_list)
-        earthquake_data = pd.read_csv(data_path+"earthquake_data.csv", index_col=0, parse_dates=True)
-        es_geo_matrix = pd.read_csv(data_path+"es_geo_matrix.csv", index_col=0)
-        es_sem_matrix = pd.read_csv(data_path+"es_sem_matrix.csv", index_col=0)
-        gnss_geo_matrix = pd.read_csv(data_path+"gnss_geo_matrix.csv", index_col=0)
-        station_dict_use = pickle.load(open(data_path+"station_dict_use.pkl", "rb"))
-        earthquake_dict_use = pickle.load(open(data_path+"grid_data/grid_id_map.pkl", "rb"))
-        dataset_dict[area] =  EarthquakeGNSSDataset(area=area,
-                                                    earthquake_data=earthquake_data,es_geo_matrix=es_geo_matrix,es_sem_matrix=es_sem_matrix,
-                                                    gnss_geo_matrix=gnss_geo_matrix,gnss_data=gnss_data,geo_percentage=geo_percentage, sem_percentage=sem_percentage,
-                                                    lape_dim=lape_dim,station_dict_use=station_dict_use,earthquake_dict_use=earthquake_dict_use,
-                                                    window_size=window_size,forecast_horizon=forecast_horizon,earthquake_threshold=4,time_resolution=time_resolution,
-                                                    earthquake_catalog_window = earthquake_catalog_window)
-    dataset = CombinedEarthquakeGNSSDataset(dataset_dict)
+        if area == "California (Southern)":
+            data_path = data_dir+area+"/"
+            gnss_data = pd.read_csv(data_path + "gnss_data.csv", index_col=0, parse_dates=True, low_memory=False).map(parse_str_list)
+            earthquake_data = pd.read_csv(data_path+"earthquake_data.csv", index_col=0, parse_dates=True)
+            es_geo_matrix = pd.read_csv(data_path+"es_geo_matrix.csv", index_col=0)
+            es_sem_matrix = pd.read_csv(data_path+"es_sem_matrix.csv", index_col=0)
+            gnss_geo_matrix = pd.read_csv(data_path+"gnss_geo_matrix.csv", index_col=0)
+            station_dict_use = pickle.load(open(data_path+"station_dict_use.pkl", "rb"))
+            earthquake_dict_use = pickle.load(open(data_path+"grid_data/grid_id_map.pkl", "rb"))
+            dataset_dict[area] =  EarthquakeGNSSDataset(area=area,
+                                                        earthquake_data=earthquake_data,es_geo_matrix=es_geo_matrix,es_sem_matrix=es_sem_matrix,
+                                                        gnss_geo_matrix=gnss_geo_matrix,gnss_data=gnss_data,geo_percentage=geo_percentage, sem_percentage=sem_percentage,
+                                                        lape_dim=lape_dim,station_dict_use=station_dict_use,earthquake_dict_use=earthquake_dict_use,
+                                                        window_size=window_size,forecast_horizon=forecast_horizon,earthquake_threshold=4,time_resolution=time_resolution,
+                                                        earthquake_catalog_window = earthquake_catalog_window)
+            dataset = CombinedEarthquakeGNSSDataset(dataset_dict)
     return dataset

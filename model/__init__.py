@@ -26,6 +26,18 @@ class LightingModel(L.LightningModule):
             self.log(f"{name}", loss, prog_bar=True)
         return total_loss
     
+    def on_after_backward(self):
+        
+        total_grad_norm = 0.0
+        for p in self.model.parameters():
+            if p.grad is not None:
+                param_grad_norm = p.grad.data.norm(2)
+                total_grad_norm += param_grad_norm.item() ** 2
+        total_grad_norm = total_grad_norm ** 0.5
+
+        # 记录梯度 norm
+        self.log("train_grad_norm", total_grad_norm, prog_bar=True)
+
     def training_step(self, batch, batch_idx):
         log_energy_history = batch['log_energy_history']
         gnss_data_history = batch['gnss_data_history']
@@ -97,6 +109,50 @@ class LightingModel(L.LightningModule):
         )
         self.log("val_loss", val_loss)
         return val_loss
+    
+    def predict_step(self, batch, batch_idx):
+        log_energy_history = batch['log_energy_history']
+        gnss_data_history = batch['gnss_data_history']
+        log_energy_future = batch['log_energy_future']
+        earthquake_data_future_day = batch['earthquake_data_future_day']
+        es_geo_masks = batch['es_geo_mask']
+        es_sem_masks = batch['es_sem_mask']
+        combined_gnss_masks = batch['gnss_geo_mask']
+        es_lap_masks = batch['lap_ex']
+        lap_gnss_masks = batch['lap_gnss']
+        gnss_paddding_mask = batch['gnss_padding_mask']
+        earthquake_loaction = batch['earthquake_location']
+        station_loaction = batch['station_location']
+
+        energy_predict, day_predict = self.model(
+            log_energy_history, 
+            gnss_data_history, 
+            es_lap_mx=es_lap_masks,
+            gnss_lap_mx=lap_gnss_masks,
+            es_geo_mask=es_geo_masks,
+            es_sem_mask=es_sem_masks,
+            gnss_geo_mask=combined_gnss_masks,
+            gnss_padding_mask=gnss_paddding_mask,
+            es_loc = earthquake_loaction,
+            gnss_loc = station_loaction
+        )
+
+        return {
+            'log_energy_history': log_energy_history,
+            'gnss_data_history': gnss_data_history,
+            'log_energy_future': log_energy_future,
+            'earthquake_data_future_day': earthquake_data_future_day,
+            'es_geo_mask': es_geo_masks,
+            'es_sem_mask': es_sem_masks,
+            'gnss_geo_mask': combined_gnss_masks,
+            'lap_ex': es_lap_masks,
+            'lap_gnss': lap_gnss_masks,
+            'gnss_padding_mask': gnss_paddding_mask,
+            'earthquake_location': earthquake_loaction,
+            'station_location': station_loaction,
+            'energy_predict': energy_predict,
+            'day_predict': day_predict
+        }
     
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
