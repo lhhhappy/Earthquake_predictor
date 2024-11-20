@@ -99,11 +99,11 @@ else:
 
 # Define checkpoint and learning rate monitor callbacks
 checkpoint_callback = ModelCheckpoint(
-    monitor='val_psnr',
+    monitor='val_loss',
     dirpath=args.save_dir,
-    filename=args.save_dir + 'Val-{epoch:02d}-{val_psnr:.2f}',
+    filename=args.save_dir + 'Val-{epoch:02d}-{val_loss:.2f}',
     save_top_k=1,
-    mode='max',
+    mode='min',
     save_last=True,
     verbose=True,
     every_n_epochs=50
