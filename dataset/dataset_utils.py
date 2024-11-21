@@ -588,6 +588,13 @@ def generate_masks(es_geo_matrix, es_sem_matrix, gnss_geo_matrix, geo_percentage
     return geo_mask, sem_mask, gnss_geo_mask
 
 
+from torch.utils.data import Dataset, Subset
+
+from functools import lru_cache
+import copy
+from torch.utils.data import Dataset, Subset
+import torch.nn.functional as F
+
 class CombinedEarthquakeGNSSDataset(Dataset):
     def __init__(self, region_datasets):
         """
@@ -598,26 +605,67 @@ class CombinedEarthquakeGNSSDataset(Dataset):
         """
         self.region_datasets = region_datasets
         self.region_names = list(region_datasets.keys())
-        # 计算每个区域数据集的长度
+        
+        # 计算每个区域数据集的长度并缓存起始索引
         self.lengths = {region: len(ds) for region, ds in region_datasets.items()}
-        # 计算总长度
+        self.start_indices = self._compute_start_indices()
         self.total_length = sum(self.lengths.values())
         self.lape_dim = region_datasets[self.region_names[0]].lape_dim
+
+    def _compute_start_indices(self):
+        """
+        预计算每个区域的起始全局索引。
+        """
+        start_indices = {}
+        current_start = 0
+        for region in self.region_names:
+            start_indices[region] = current_start
+            current_start += self.lengths[region]
+        return start_indices
+
     def __len__(self):
         return self.total_length
 
-    def __getitem__(self, idx):
+    def _slice_to_new_instance(self, slice_idx):
         """
-        根据全局索引检索一个样本。将全局索引映射到特定区域的数据集。
+        从切片范围生成一个新的子数据集实例。
+        """
+        start, stop, step = slice_idx.indices(self.total_length)
+        indices = list(range(start, stop, step))  # 生成切片索引范围
+        return Subset(self, indices)  # 返回 Subset 实例
+
+    @lru_cache(maxsize=256)
+    def _map_global_to_region(self, idx):
+        """
+        根据全局索引快速定位到对应的区域和区域内索引。
+
+        参数：
+        - idx: 全局索引
+        返回：
+        - region: 区域名称
+        - local_idx: 区域内索引
         """
         for region in self.region_names:
-            if idx < self.lengths[region]:
-                data = self.region_datasets[region][idx]
-                data['region'] = region  # 在数据中包含区域名称，便于识别。
-                return data
-            idx -= self.lengths[region]
+            start_idx = self.start_indices[region]
+            end_idx = start_idx + self.lengths[region]
+            if start_idx <= idx < end_idx:
+                local_idx = idx - start_idx
+                return region, local_idx
         raise IndexError("Index out of range in CombinedEarthquakeGNSSDataset.")
 
+    def __getitem__(self, idx):
+        """
+        根据全局索引检索一个样本或一个切片范围。
+        """
+        if isinstance(idx, slice):
+            return self._slice_to_new_instance(idx)  # 返回 Subset 实例
+
+        # 处理单个索引
+        region, local_idx = self._map_global_to_region(idx)
+        data = self.region_datasets[region][local_idx]
+        data['region'] = region  # 在数据中包含区域名称，便于识别
+        return data
+    
     def collate_fn(self, batch):
         """
         自定义的 collate 函数，用于处理具有不同 GNSS 节点数量的批次。
@@ -644,7 +692,7 @@ class CombinedEarthquakeGNSSDataset(Dataset):
         station_location_list = []
         # 遍历批次中的每个样本，填充 GNSS 数据和掩码以匹配最大节点数
         gnss_padding_mask_list = []
-        batch_copy = copy.deepcopy(batch)
+        batch = copy.deepcopy(batch)
         for item in batch_copy:
             gnss_padding_mask = torch.ones(max_gnss_nodes_in_batch, max_gnss_nodes_in_batch, dtype=torch.bool)
             num_gnss_nodes = item['gnss_data_history'].shape[1]
@@ -694,7 +742,7 @@ class CombinedEarthquakeGNSSDataset(Dataset):
             earthquake_quake_location = item['earthquake_location']
             station_location = item['station_location']
 
-
+            # 假设您有 normalize_locations 函数，请确保在代码中定义或导入
             earthquake_quake_location, station_location = normalize_locations(earthquake_quake_location, station_location)
 
             padded_station_location = F.pad(
@@ -742,10 +790,10 @@ class CombinedEarthquakeGNSSDataset(Dataset):
             'gnss_geo_mask': gnss_geo_masks,
             'lap_ex': lap_ex,
             'lap_gnss': lap_gnss,
-            'earthquake_happen':earthquake_happen,
+            'earthquake_happen': earthquake_happen,
             'gnss_padding_mask': gnss_padding_mask,
-            'earthquake_location':earthquake_location,
-            'station_location':station_location
+            'earthquake_location': earthquake_location,
+            'station_location': station_location
         }
 
         return batch_data

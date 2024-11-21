@@ -80,8 +80,3 @@ python train.py \
     --sem-percentage 0.3 \
     --time-resolution $time_resolution \
     --earthquake-catalog-window $earthquake_history_window_day
-
-# Save the current script to the Experiments directory
-EXPERIMENTS_DIR="${SAVE_DIR}${Experiment_name}/Hyperparameters"
-mkdir -p $EXPERIMENTS_DIR
-cp "$0" "$EXPERIMENTS_DIR/$(basename $0)"
