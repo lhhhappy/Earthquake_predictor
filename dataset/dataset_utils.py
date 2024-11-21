@@ -128,7 +128,7 @@ class EarthquakeGNSSDataset(Dataset):
                  es_geo_matrix, es_sem_matrix, gnss_geo_matrix,
                  geo_percentage, sem_percentage, lape_dim, earthquake_dict_use, station_dict_use,
                  window_size=14, forecast_horizon=14, time_resolution=14, earthquake_catalog_window=1400,
-                 earthquake_threshold=4.0, missing_threshold=5, last_date = None):
+                 earthquake_threshold=4.0, missing_threshold=5, start_date=None, last_date=None,minist_threshold=5):
         
         """
         地震-GNSS数据集的自定义Dataset类。
@@ -145,6 +145,8 @@ class EarthquakeGNSSDataset(Dataset):
         - earthquake_catalog_window: 地震历史窗口大小，默认1400。
         - earthquake_threshold: 地震震级阈值，默认4.0。
         - missing_threshold: 允许的最大连续缺失值数量，默认5。
+        - start_date: 限制数据集的起始日期，格式为 'YYYY-MM-DD'。
+        - last_date: 限制数据集的结束日期，格式为 'YYYY-MM-DD'。
         """
         self.area = area
         self.earthquake_data = earthquake_data
@@ -155,32 +157,68 @@ class EarthquakeGNSSDataset(Dataset):
         self.missing_threshold = missing_threshold
         self.lape_dim = lape_dim
         self.time_resolution = time_resolution
-        self.earthquake_location = torch.tensor([earthquake_dict_use[i] for i in sorted(earthquake_dict_use.keys())], dtype=torch.float32)
+        self.earthquake_location = torch.tensor(
+            [earthquake_dict_use[i] for i in sorted(earthquake_dict_use.keys())], dtype=torch.float32
+        )
 
-        self.station_location = np.array([station_dict_use[i] for i in sorted(station_dict_use.keys())], dtype=np.float32)
+        self.station_location = np.array(
+            [station_dict_use[i] for i in sorted(station_dict_use.keys())], dtype=np.float32
+        )
 
         self.earthquake_data_date = earthquake_data.index
         self.gnss_data_date = gnss_data.index
 
         self.gnss_data = dataframe_to_array(gnss_data)
 
-        # 生成掩码
+        print(f"Original GNSS Data Shape: {self.gnss_data.shape}")
+        if start_date is not None and last_date is not None:
+            missing_mask = np.isnan(self.gnss_data).all(axis=2)
+            max_missing_lengths = self.max_consecutive_trues(missing_mask)
+            stations_to_keep = max_missing_lengths <= self.missing_threshold
+            self.gnss_data = self.gnss_data[:,stations_to_keep,:]
+            self.station_location = self.station_location[stations_to_keep]
+
+        print(f"Filtered GNSS Data Shape: {self.gnss_data.shape}")
+        
         self.es_geo_mask, self.es_sem_mask, self.gnss_geo_mask = generate_masks(
             es_geo_matrix, es_sem_matrix, gnss_geo_matrix, geo_percentage, sem_percentage
         )
-        self.start_index = self.find_first_valid_index(self.gnss_data)
 
-        # 设置起始时间索引
-        start_day = pd.Timestamp(gnss_data.index[self.start_index].date())
-        self.earthquake_start_index = earthquake_data.index.get_loc(start_day)
+        original_start_index = self.find_first_valid_index(self.gnss_data,minist_threshold=minist_threshold)
 
-        # 确保在地震数据和 GNSS 数据长度的基础上计算数据集长度
-        self.length = min(
-            len(gnss_data) - self.start_index - self.window_size - self.forecast_horizon + 1,
-            len(earthquake_data) - self.earthquake_start_index - self.window_size - self.forecast_horizon
-        )
-        
+        if start_date is not None:
+            start_date = pd.Timestamp(start_date)
+        if last_date is not None:
+            last_date = pd.Timestamp(last_date)
 
+        if start_date is not None:
+            gnss_start_date_index = self.gnss_data_date.get_indexer([start_date], method='bfill')[0]
+            gnss_start_date_index = max(gnss_start_date_index, original_start_index)
+            self.start_index = max(gnss_start_date_index, self.window_size)
+        else:
+            self.start_index = max(original_start_index, self.window_size)
+
+        start_day = pd.Timestamp(self.gnss_data_date[self.start_index].date())
+        self.earthquake_start_index = self.earthquake_data_date.get_loc(start_day)
+
+        gnss_end_index = len(self.gnss_data_date) - 1
+        earthquake_end_index = len(self.earthquake_data_date) - 1
+
+        if last_date is not None:
+            gnss_last_date_index = self.gnss_data_date.get_indexer([last_date], method='ffill')[0]
+            gnss_end_index = min(gnss_end_index, gnss_last_date_index)
+            earthquake_last_date_index = self.earthquake_data_date.get_indexer([last_date], method='ffill')[0]
+            earthquake_end_index = min(earthquake_end_index, earthquake_last_date_index)
+                # 全局站点移除
+
+
+
+        gnss_length = gnss_end_index - self.start_index - self.forecast_horizon + 1 - self.window_size
+        earthquake_length = earthquake_end_index - self.earthquake_start_index - self.forecast_horizon + 1 - self.window_size
+        print(f"GNSS Data Length: {gnss_length}")
+        print(f"Earthquake Data Length: {earthquake_length}")
+        self.length = min(gnss_length, earthquake_length)
+        self.length = max(0, self.length)
         self.lap_ex = graph_laplacian_embedding(torch.tensor(es_geo_matrix.values), lape_dim)
 
     def __len__(self):
@@ -190,48 +228,57 @@ class EarthquakeGNSSDataset(Dataset):
         return self.area
 
     def __getitem__(self, idx):
-        # 获取历史和未来的地震数据
+        gnss_idx = idx + self.start_index
+        earthquake_idx = idx + self.earthquake_start_index
+        if idx >= self.length or idx < 0:
+            raise IndexError("Index out of range.")
         earthquake_data_history = self.earthquake_data.iloc[
-            max(0, self.earthquake_start_index + self.window_size + idx - self.earthquake_window):
-            self.earthquake_start_index + self.window_size + idx
+            max(0, earthquake_idx + self.window_size - self.earthquake_window):
+            earthquake_idx + self.window_size
         ]
         earthquake_data_future = self.earthquake_data.iloc[
-            self.earthquake_start_index + self.window_size + idx:
-            self.earthquake_start_index + self.window_size + idx + self.forecast_horizon
+            earthquake_idx + self.window_size:
+            earthquake_idx + self.window_size + self.forecast_horizon
         ]
-
-        # 获取GNSS历史数据并转置以匹配期望的维度
         gnss_data_history = self.gnss_data[
-            idx + self.start_index:idx + self.window_size + self.start_index
+            gnss_idx :gnss_idx + self.window_size
         ].transpose(1, 0, 2)
 
-        
-        
-        earthquake_data_history_date = self.earthquake_data_date[
-            max(0, self.earthquake_start_index + self.window_size + idx - self.earthquake_window):
-            self.earthquake_start_index + self.window_size + idx
-        ]
-
-        earthquake_data_future_date = self.earthquake_data_date[
-            self.earthquake_start_index + self.window_size + idx:
-            self.earthquake_start_index + self.window_size + idx + self.forecast_horizon
-        ]
-
         gnss_data_history_date = self.gnss_data_date[
-            idx + self.start_index:idx + self.window_size + self.start_index
+            gnss_idx:gnss_idx + self.window_size
         ]
-                
+        earthquake_data_history_date = self.earthquake_data_date[
+            max(0, earthquake_idx + self.window_size - self.earthquake_window):
+            earthquake_idx + self.window_size
+        ]
+        earthquake_data_future_date = self.earthquake_data_date[
+            earthquake_idx + self.window_size:
+            earthquake_idx + self.window_size + self.forecast_horizon
+        ]
+
+        # 日期检查
+        # 检查 GNSS 历史数据的日期与地震数据的日期是否对齐
+        # if not gnss_data_history_date.equals(earthquake_data_history_date[-self.window_size:]):
+        #     raise ValueError(f"Date mismatch between GNSS data and earthquake data at index {idx}.")
+
+        # 打印日期信息（可选，供调试使用）
+        print(f"GNSS Data Date Range: {gnss_data_history_date[0]} to {gnss_data_history_date[-1]}")
+        print(f"Earthquake Data History Date Range: {earthquake_data_history_date[0]} to {earthquake_data_history_date[-1]}")
+        print(f"Earthquake Data Future Date Range: {earthquake_data_future_date[0]} to {earthquake_data_future_date[-1]}")
+
+        # ...（以下代码保持不变）
+        # 计算标签和特征
         earthquake_happen = torch.tensor((earthquake_data_future >= self.earthquake_threshold).any(axis=0).to_numpy(), dtype=torch.bool)
 
         # 计算历史和未来的对数能量
-        log_energy_history = calculate_energy_in_time_window(earthquake_data_history,self.time_resolution).values.T
-        log_energy_future = calculate_energy_in_time_window(earthquake_data_future,self.time_resolution).values.T
+        log_energy_history = calculate_energy_in_time_window(earthquake_data_history, self.time_resolution).values.T
+        log_energy_future = calculate_energy_in_time_window(earthquake_data_future, self.time_resolution).values.T
 
         # 获取未来地震事件发生的天数
         earthquake_data_future_day = find_first_earthquake(
             earthquake_data_future, self.earthquake_threshold
         )
-        
+
         # 检测并移除具有长连续缺失数据的站点
         missing_mask = np.isnan(gnss_data_history).all(axis=2)
         max_missing_lengths = self.max_consecutive_trues(missing_mask)
@@ -250,11 +297,12 @@ class EarthquakeGNSSDataset(Dataset):
         gnss_data_history = fill_nan_with_interpolation(gnss_data_history).transpose(1, 0, 2)
 
         gnss_data_history = normalize(gnss_data_history, method='min-max')
-        
-        gnss_trend_filtered = apply_filter_to_all_nodes(gnss_data_history, window_length = 21 , polyorder=3)
+
+        gnss_trend_filtered = apply_filter_to_all_nodes(gnss_data_history, window_length=21, polyorder=3)
         gnss_seasonal_component = gnss_data_history - gnss_trend_filtered
-        
+
         gnss_data_history = np.concatenate([gnss_trend_filtered, gnss_seasonal_component], axis=2)
+
         # 将数据转换为张量
         log_energy_history = torch.tensor(
             log_energy_history, dtype=torch.float32
@@ -276,17 +324,18 @@ class EarthquakeGNSSDataset(Dataset):
             'gnss_geo_mask': sample_gnss_geo_mask,
             'lap_ex': self.lap_ex,
             'lap_gnss': sample_lap_gnss,
-            "earthquake_happen":earthquake_happen,
-            "earthquake_location":self.earthquake_location,
-            "station_location":station_location_use
+            'earthquake_happen': earthquake_happen,
+            'earthquake_location': self.earthquake_location,
+            'station_location': station_location_use
         }
-    def find_first_valid_index(self, gnss_data):
+
+    def find_first_valid_index(self, gnss_data, minist_threshold=5):
         """
         查找 GNSS 数据中第一个包含至少两个非 NaN 数据的时间点索引。
         """
         for idx, data in enumerate(gnss_data):
             # 统计非 NaN 元素数量
-            if np.sum(~np.isnan(data)) >= 5:
+            if np.sum(~np.isnan(data)) >= minist_threshold:
                 return idx
         return 
     
@@ -610,7 +659,7 @@ class CombinedEarthquakeGNSSDataset(Dataset):
         self.lengths = {region: len(ds) for region, ds in region_datasets.items()}
         self.start_indices = self._compute_start_indices()
         self.total_length = sum(self.lengths.values())
-        self.lape_dim = region_datasets[self.region_names[0]].lape_dim
+        self.lape_dim = region_datasets[self.region_names[0]].dataset.lape_dim
 
     def _compute_start_indices(self):
         """
@@ -634,7 +683,6 @@ class CombinedEarthquakeGNSSDataset(Dataset):
         indices = list(range(start, stop, step))  # 生成切片索引范围
         return Subset(self, indices)  # 返回 Subset 实例
 
-    @lru_cache(maxsize=256)
     def _map_global_to_region(self, idx):
         """
         根据全局索引快速定位到对应的区域和区域内索引。
@@ -798,34 +846,106 @@ class CombinedEarthquakeGNSSDataset(Dataset):
 
         return batch_data
 
-def get_dataset(data_dir,window_size,forecast_horizon,lape_dim,geo_percentage,sem_percentage,
-                time_resolution,earthquake_catalog_window):
+def get_dataset(data_dir, window_size, forecast_horizon, lape_dim, geo_percentage, sem_percentage,
+                time_resolution, earthquake_catalog_window,train_percentage=0.9,start_date=None,last_date=None,minist_threshold=5):
     """
-    Load the dataset from the specified directory.
-    data_dir: Path to the directory containing the dataset files.
-    window_size: Size of the historical window.
-    forecast_horizon: Size of the future window.
-    lape_dim: Number of dimensions for the graph Laplacian.
-    far_mask_delta: Threshold for the far mask.
-    dtw_delta: Threshold for the DT
+    从指定目录加载数据集，并将每个地区的数据集划分为训练集和验证集。
+    
+    参数：
+    - data_dir: 包含数据集文件的目录路径。
+    - window_size: 历史窗口的大小。
+    - forecast_horizon: 未来窗口的大小。
+    - lape_dim: 图拉普拉斯嵌入的维度数。
+    - geo_percentage: 地理掩码的百分比。
+    - sem_percentage: 语义掩码的百分比。
+    - time_resolution: 时间分辨率。
+    - earthquake_catalog_window: 地震目录窗口的大小。
+    
+    返回：
+    - combined_train_dataset: 组合的训练数据集。
+    - combined_val_dataset: 组合的验证数据集。
     """
+    import os
+    import pickle
+    import pandas as pd
+    from torch.utils.data import Subset
+    
     area_list = os.listdir(data_dir)
-    dataset_dict = {}
+    train_datasets = {}
+    val_datasets = {}
     for area in area_list:
+        data_path = os.path.join(data_dir, area)
         if area == "California (Southern)":
-            data_path = data_dir+area+"/"
-            gnss_data = pd.read_csv(data_path + "gnss_data.csv", index_col=0, parse_dates=True, low_memory=False).map(parse_str_list)
-            earthquake_data = pd.read_csv(data_path+"earthquake_data.csv", index_col=0, parse_dates=True)
-            es_geo_matrix = pd.read_csv(data_path+"es_geo_matrix.csv", index_col=0)
-            es_sem_matrix = pd.read_csv(data_path+"es_sem_matrix.csv", index_col=0)
-            gnss_geo_matrix = pd.read_csv(data_path+"gnss_geo_matrix.csv", index_col=0)
-            station_dict_use = pickle.load(open(data_path+"station_dict_use.pkl", "rb"))
-            earthquake_dict_use = pickle.load(open(data_path+"grid_data/grid_id_map.pkl", "rb"))
-            dataset_dict[area] =  EarthquakeGNSSDataset(area=area,
-                                                        earthquake_data=earthquake_data,es_geo_matrix=es_geo_matrix,es_sem_matrix=es_sem_matrix,
-                                                        gnss_geo_matrix=gnss_geo_matrix,gnss_data=gnss_data,geo_percentage=geo_percentage, sem_percentage=sem_percentage,
-                                                        lape_dim=lape_dim,station_dict_use=station_dict_use,earthquake_dict_use=earthquake_dict_use,
-                                                        window_size=window_size,forecast_horizon=forecast_horizon,earthquake_threshold=4,time_resolution=time_resolution,
-                                                        earthquake_catalog_window = earthquake_catalog_window)
-            dataset = CombinedEarthquakeGNSSDataset(dataset_dict)
-    return dataset
+            if not os.path.isdir(data_path):
+                continue  # 跳过非目录项
+            
+            # 尝试加载数据，如果缺少文件则跳过该地区
+            try:
+                gnss_data = pd.read_csv(
+                    os.path.join(data_path, "gnss_data.csv"),
+                    index_col=0, parse_dates=True, low_memory=False
+                ).map(parse_str_list)
+                earthquake_data = pd.read_csv(
+                    os.path.join(data_path, "earthquake_data.csv"),
+                    index_col=0, parse_dates=True
+                )
+                es_geo_matrix = pd.read_csv(
+                    os.path.join(data_path, "es_geo_matrix.csv"), index_col=0
+                )
+                es_sem_matrix = pd.read_csv(
+                    os.path.join(data_path, "es_sem_matrix.csv"), index_col=0
+                )
+                gnss_geo_matrix = pd.read_csv(
+                    os.path.join(data_path, "gnss_geo_matrix.csv"), index_col=0
+                )
+                with open(os.path.join(data_path, "station_dict_use.pkl"), "rb") as f:
+                    station_dict_use = pickle.load(f)
+                with open(os.path.join(data_path, "grid_data", "grid_id_map.pkl"), "rb") as f:
+                    earthquake_dict_use = pickle.load(f)
+            except FileNotFoundError as e:
+                print(f"跳过地区 {area}，因为缺少文件：{e}")
+                continue
+            
+            # 创建该地区的 EarthquakeGNSSDataset 实例
+            area_dataset = EarthquakeGNSSDataset(
+                area=area,
+                earthquake_data=earthquake_data,
+                es_geo_matrix=es_geo_matrix,
+                es_sem_matrix=es_sem_matrix,
+                gnss_geo_matrix=gnss_geo_matrix,
+                gnss_data=gnss_data,
+                geo_percentage=geo_percentage,
+                sem_percentage=sem_percentage,
+                lape_dim=lape_dim,
+                station_dict_use=station_dict_use,
+                earthquake_dict_use=earthquake_dict_use,
+                window_size=window_size,
+                forecast_horizon=forecast_horizon,
+                earthquake_threshold=4,
+                time_resolution=time_resolution,
+                earthquake_catalog_window=earthquake_catalog_window,
+                minist_threshold=minist_threshold,
+                start_date=start_date,
+                last_date=last_date
+            )
+            
+            # 将该地区的数据集划分为训练集和验证集
+            total_length = len(area_dataset)
+            train_size = int(train_percentage * total_length)
+            indices = list(range(total_length))
+            train_indices = indices[:train_size]
+            val_indices = indices[train_size:]
+            
+            # 创建训练集和验证集的 Subset 实例
+            train_subset = Subset(area_dataset, train_indices)
+            val_subset = Subset(area_dataset, val_indices)
+            
+            # 将子集存储到字典中
+            train_datasets[area] = train_subset
+            val_datasets[area] = val_subset
+        
+    # 创建组合的数据集
+    combined_train_dataset = CombinedEarthquakeGNSSDataset(train_datasets)
+    combined_val_dataset = CombinedEarthquakeGNSSDataset(val_datasets)
+    
+    return combined_train_dataset, combined_val_dataset

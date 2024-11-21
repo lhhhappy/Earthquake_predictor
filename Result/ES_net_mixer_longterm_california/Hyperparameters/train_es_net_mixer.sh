@@ -65,8 +65,8 @@ python train.py \
     --model-arch "ES_net_mixer" \
     --energy-loss "mse" \
     --day-loss "None" \
-    --batch-size 8 \
-    --val-batch-size 8 \
+    --batch-size 4 \
+    --val-batch-size 4 \
     --max-epochs 100 \
     --device 1 \
     --lr 1e-4 \

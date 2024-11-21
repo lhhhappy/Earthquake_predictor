@@ -40,13 +40,14 @@ parser.add_argument("--sem-percentage", type=float, default=0.5, help='Percentag
 parser.add_argument("--time-resolution", type=int, default=1, help='Time resolution for the dataset')
 parser.add_argument("--seed", type=int, default=42, help='Seed for reproducibility')
 parser.add_argument("--earthquake-catalog-window", type=int, default=14, help='Window size for earthquake catalog')
+parser.add_argument("--finetune-from-model", type=str, default=None, help='Path to the model to finetune')
 
 args = parser.parse_args()
 
 # Load dataset
 lightning.seed_everything(args.seed)
 
-dataset = get_dataset(
+train_dataset, val_dataset = get_dataset(
     data_dir=args.data_path,
     window_size=args.history_window,
     forecast_horizon=args.forecast_window,
@@ -60,16 +61,12 @@ dataset = get_dataset(
 # Define loss function
 loss_fn = get_loss(energy_loss=args.energy_loss, day_loss=args.day_loss)
 
-train_size = int(len(dataset) * 0.9)
-train_dataset = dataset[:train_size]  # 取前 90% 的数据作为训练集
-val_dataset = dataset[train_size:]    # 取后 10% 的数据作为验证集
-
 # Create DataLoaders for training and validation
 train_loader = DataLoader(
-    train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=dataset.collate_fn, num_workers=127
+    train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=train_dataset.collate_fn, num_workers=127
 )
 val_loader = DataLoader(
-    val_dataset, batch_size=args.val_batch_size, shuffle=False, collate_fn=dataset.collate_fn, num_workers=127
+    val_dataset, batch_size=args.val_batch_size, shuffle=False, collate_fn=train_dataset.collate_fn, num_workers=127
 )
 
 # Load model parameters from JSON string
@@ -117,5 +114,7 @@ trainer = Trainer(
     log_every_n_steps=20,
 )
 
+if args.finetune_from_model:
+    model.load_from_checkpoint(args.finetune_from_model)
 # Start training
 trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
