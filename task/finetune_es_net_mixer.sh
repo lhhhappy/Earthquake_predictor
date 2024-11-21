@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Set the data path and save directory
-Experiment_name="ES_net_mixer_longterm_california"
+Experiment_name="Finetune_ES_net_mixer_longterm_california"
 
 DATA_PATH="/home/linhang/workbench/Earthquake_data/"
 
@@ -69,7 +69,7 @@ python train.py \
     --val-batch-size 4 \
     --max-epochs 100 \
     --device 1 \
-    --lr 1e-4 \
+    --lr 5e-5 \
     --save-dir $MODEL_DIR \
     --log-dir $LOG_DIR \
     --model_params "model_params.json" \
@@ -81,5 +81,5 @@ python train.py \
     --time-resolution $time_resolution \
     --earthquake-catalog-window $earthquake_history_window_day \
     --finetune-from-model "Result/ES_net_mixer_longterm_california/checkpoints/last.ckpt" \
-    --start_date "2017-01-01" \
-    --last_date "2023-01-01"
+    --start-date "2017-01-01" \
+    --last-date "2023-01-01"

@@ -218,3 +218,7 @@ class LightingModel(L.LightningModule):
             'day_predict': day_predict,
             'earthquake_happen': earthquake_happen
         }
+    def load_from_checkpoint(self, checkpoint_path):
+        state_dict = torch.load(checkpoint_path)['state_dict']
+        state_dict = {k.replace('model.', ''): v for k, v in state_dict.items()}
+        self.model.load_state_dict(state_dict)
