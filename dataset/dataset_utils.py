@@ -692,7 +692,7 @@ class CombinedEarthquakeGNSSDataset(Dataset):
         station_location_list = []
         # 遍历批次中的每个样本，填充 GNSS 数据和掩码以匹配最大节点数
         gnss_padding_mask_list = []
-        batch = copy.deepcopy(batch)
+        batch_copy = copy.deepcopy(batch)
         for item in batch_copy:
             gnss_padding_mask = torch.ones(max_gnss_nodes_in_batch, max_gnss_nodes_in_batch, dtype=torch.bool)
             num_gnss_nodes = item['gnss_data_history'].shape[1]
