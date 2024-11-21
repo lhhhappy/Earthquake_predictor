@@ -79,4 +79,7 @@ python train.py \
     --geo-percentage 0.3 \
     --sem-percentage 0.3 \
     --time-resolution $time_resolution \
-    --earthquake-catalog-window $earthquake_history_window_day
+    --earthquake-catalog-window $earthquake_history_window_day \
+    --finetune-from-model "Result/ES_net_mixer_longterm_california/checkpoints/last.ckpt" \
+    --start_date "2017-01-01" \
+    --last_date "2023-01-01"

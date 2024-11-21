@@ -128,7 +128,7 @@ class EarthquakeGNSSDataset(Dataset):
                  es_geo_matrix, es_sem_matrix, gnss_geo_matrix,
                  geo_percentage, sem_percentage, lape_dim, earthquake_dict_use, station_dict_use,
                  window_size=14, forecast_horizon=14, time_resolution=14, earthquake_catalog_window=1400,
-                 earthquake_threshold=4.0, missing_threshold=5, start_date=None, last_date=None,minist_threshold=5):
+                 earthquake_threshold=4.0, missing_threshold=5, start_date=None, last_date=None, minist_threshold=5):
         
         """
         地震-GNSS数据集的自定义Dataset类。
@@ -170,15 +170,6 @@ class EarthquakeGNSSDataset(Dataset):
 
         self.gnss_data = dataframe_to_array(gnss_data)
 
-        print(f"Original GNSS Data Shape: {self.gnss_data.shape}")
-        if start_date is not None and last_date is not None:
-            missing_mask = np.isnan(self.gnss_data).all(axis=2)
-            max_missing_lengths = self.max_consecutive_trues(missing_mask)
-            stations_to_keep = max_missing_lengths <= self.missing_threshold
-            self.gnss_data = self.gnss_data[:,stations_to_keep,:]
-            self.station_location = self.station_location[stations_to_keep]
-
-        print(f"Filtered GNSS Data Shape: {self.gnss_data.shape}")
         
         self.es_geo_mask, self.es_sem_mask, self.gnss_geo_mask = generate_masks(
             es_geo_matrix, es_sem_matrix, gnss_geo_matrix, geo_percentage, sem_percentage
@@ -211,7 +202,15 @@ class EarthquakeGNSSDataset(Dataset):
             earthquake_end_index = min(earthquake_end_index, earthquake_last_date_index)
                 # 全局站点移除
 
+        self.gnss_data_use = self.gnss_data[self.start_index:gnss_end_index + 1]
 
+        if start_date is not None and last_date is not None:
+            missing_mask = np.isnan(self.gnss_data_use.transpose(1,0,2)).all(axis=2)
+            max_missing_lengths = self.max_consecutive_trues(missing_mask)
+            stations_to_keep = max_missing_lengths <= self.missing_threshold
+            self.gnss_data = self.gnss_data[:,stations_to_keep,:]
+            self.station_location = self.station_location[stations_to_keep]
+            self.gnss_geo_mask = self.gnss_geo_mask[np.ix_(stations_to_keep, stations_to_keep)]
 
         gnss_length = gnss_end_index - self.start_index - self.forecast_horizon + 1 - self.window_size
         earthquake_length = earthquake_end_index - self.earthquake_start_index - self.forecast_horizon + 1 - self.window_size
@@ -258,13 +257,13 @@ class EarthquakeGNSSDataset(Dataset):
 
         # 日期检查
         # 检查 GNSS 历史数据的日期与地震数据的日期是否对齐
-        # if not gnss_data_history_date.equals(earthquake_data_history_date[-self.window_size:]):
-        #     raise ValueError(f"Date mismatch between GNSS data and earthquake data at index {idx}.")
+        if not gnss_data_history_date.equals(earthquake_data_history_date[-self.window_size:]):
+            raise ValueError(f"Date mismatch between GNSS data and earthquake data at index {idx}.")
 
         # 打印日期信息（可选，供调试使用）
-        print(f"GNSS Data Date Range: {gnss_data_history_date[0]} to {gnss_data_history_date[-1]}")
-        print(f"Earthquake Data History Date Range: {earthquake_data_history_date[0]} to {earthquake_data_history_date[-1]}")
-        print(f"Earthquake Data Future Date Range: {earthquake_data_future_date[0]} to {earthquake_data_future_date[-1]}")
+        # print(f"GNSS Data Date Range: {gnss_data_history_date[0]} to {gnss_data_history_date[-1]}")
+        # print(f"Earthquake Data History Date Range: {earthquake_data_history_date[0]} to {earthquake_data_history_date[-1]}")
+        # print(f"Earthquake Data Future Date Range: {earthquake_data_future_date[0]} to {earthquake_data_future_date[-1]}")
 
         # ...（以下代码保持不变）
         # 计算标签和特征
@@ -926,7 +925,7 @@ def get_dataset(data_dir, window_size, forecast_horizon, lape_dim, geo_percentag
                 earthquake_catalog_window=earthquake_catalog_window,
                 minist_threshold=minist_threshold,
                 start_date=start_date,
-                last_date=last_date
+                last_date=last_date,
             )
             
             # 将该地区的数据集划分为训练集和验证集

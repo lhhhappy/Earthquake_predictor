@@ -20,7 +20,6 @@ area_dict = {
     "California (Southern)": [32, 37, -120, -115],  # 加州南部
 }
 
-
 for area, [minlat, maxlat, minlon, maxlon] in area_dict.items():
     save_path = "/home/linhang/workbench/Earthquake_data/"+area
     topk = 100

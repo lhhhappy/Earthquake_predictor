@@ -41,6 +41,8 @@ parser.add_argument("--time-resolution", type=int, default=1, help='Time resolut
 parser.add_argument("--seed", type=int, default=42, help='Seed for reproducibility')
 parser.add_argument("--earthquake-catalog-window", type=int, default=14, help='Window size for earthquake catalog')
 parser.add_argument("--finetune-from-model", type=str, default=None, help='Path to the model to finetune')
+parser.add_argument("--start-date", type=str, default=None, help='Start date for training')
+parser.add_argument("--last-date", type=str, default=None, help='End date for training')
 
 args = parser.parse_args()
 
@@ -55,7 +57,9 @@ train_dataset, val_dataset = get_dataset(
     geo_percentage=args.geo_percentage,
     sem_percentage=args.sem_percentage,
     time_resolution=args.time_resolution,
-    earthquake_catalog_window=args.earthquake_catalog_window
+    earthquake_catalog_window=args.earthquake_catalog_window,
+    start_date=args.start_date,
+    last_date=args.last_date
     )
 
 # Define loss function
