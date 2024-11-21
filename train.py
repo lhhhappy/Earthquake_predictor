@@ -65,7 +65,7 @@ train_size = int(len(dataset) * 0.9)
 val_size = len(dataset) - train_size
 
 # 分割数据集
-train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size], generator=torch.Generator().manual_seed(args.seed))
 
 # Create DataLoaders for training and validation
 train_loader = DataLoader(
@@ -101,12 +101,12 @@ else:
 checkpoint_callback = ModelCheckpoint(
     monitor='val_loss',
     dirpath=args.save_dir,
-    filename=args.save_dir + 'Val-{epoch:02d}-{val_loss:.2f}',
+    filename='Val-{epoch:02d}-{val_loss:.2f}',
     save_top_k=1,
     mode='min',
     save_last=True,
     verbose=True,
-    every_n_epochs=50
+    every_n_epochs=2
 )
 
 lr_monitor = LearningRateMonitor(logging_interval='step')

@@ -133,6 +133,7 @@ class LightingModel(L.LightningModule):
         gnss_paddding_mask = batch['gnss_padding_mask']
         earthquake_loaction = batch['earthquake_location']
         station_loaction = batch['station_location']
+        earthquake_happen = batch['earthquake_happen']
 
         energy_predict, day_predict = self.model(
             log_energy_history, 
@@ -144,7 +145,8 @@ class LightingModel(L.LightningModule):
             gnss_geo_mask=combined_gnss_masks,
             gnss_padding_mask=gnss_paddding_mask,
             es_loc = earthquake_loaction,
-            gnss_loc = station_loaction
+            gnss_loc = station_loaction,
+            
         )
 
         return {
@@ -161,7 +163,8 @@ class LightingModel(L.LightningModule):
             'earthquake_location': earthquake_loaction,
             'station_location': station_loaction,
             'energy_predict': energy_predict,
-            'day_predict': day_predict
+            'day_predict': day_predict,
+            'earthquake_happen': earthquake_happen
         }
     
     def configure_optimizers(self):
@@ -183,6 +186,7 @@ class LightingModel(L.LightningModule):
         gnss_paddding_mask = batch['gnss_padding_mask']
         earthquake_loaction = batch['earthquake_location']
         station_loaction = batch['station_location']
+        earthquake_happen = batch['earthquake_happen']
 
         energy_predict, day_predict = self.model(
             log_energy_history, 
@@ -211,5 +215,6 @@ class LightingModel(L.LightningModule):
             'earthquake_location': earthquake_loaction,
             'station_location': station_loaction,
             'energy_predict': energy_predict,
-            'day_predict': day_predict
+            'day_predict': day_predict,
+            'earthquake_happen': earthquake_happen
         }

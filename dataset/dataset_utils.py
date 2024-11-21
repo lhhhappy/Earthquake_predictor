@@ -128,7 +128,8 @@ class EarthquakeGNSSDataset(Dataset):
                  es_geo_matrix, es_sem_matrix, gnss_geo_matrix,
                  geo_percentage, sem_percentage, lape_dim, earthquake_dict_use, station_dict_use,
                  window_size=14, forecast_horizon=14, time_resolution=14, earthquake_catalog_window=1400,
-                 earthquake_threshold=4.0, missing_threshold=5):
+                 earthquake_threshold=4.0, missing_threshold=5, last_date = None):
+        
         """
         地震-GNSS数据集的自定义Dataset类。
 
@@ -530,6 +531,28 @@ def normalize_locations(quake_location, station_location):
     normalized_station_location[:, 1] = 2 * (normalized_station_location[:, 1] + 180) / 360 - 1  # Longitude normalization
 
     return normalized_quake_location, normalized_station_location
+
+def denormalize_locations(normalized_quake_location):
+    """
+    Denormalize latitude and longitude for quake and station locations from range [-1, 1] back to original range.
+
+    Args:
+    normalized_quake_location (torch.Tensor): Tensor of shape (num, 2) for normalized earthquake locations.
+    normalized_station_location (torch.Tensor): Tensor of shape (num, 2) for normalized station locations.
+
+    Returns:
+    torch.Tensor, torch.Tensor: Denormalized quake and station locations.
+    """
+    # Clone the input tensors to avoid modifying the original ones
+    denormalized_quake_location = normalized_quake_location.clone()
+
+
+    # Denormalize quake locations
+    denormalized_quake_location[:, 0] = (denormalized_quake_location[:, 0] + 1) * 180 / 2 - 90  # Latitude denormalization
+    denormalized_quake_location[:, 1] = (denormalized_quake_location[:, 1] + 1) * 360 / 2 - 180  # Longitude denormalization
+
+    return denormalized_quake_location
+
 
 def generate_masks(es_geo_matrix, es_sem_matrix, gnss_geo_matrix, geo_percentage=0.3, sem_percentage=0.3):
     """

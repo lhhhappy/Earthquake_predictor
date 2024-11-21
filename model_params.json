@@ -18,8 +18,8 @@
     "qkv_bias": true,
     "attn_drop": 0.1,
     "proj_drop": 0.1,
-    "mlp_ratio": 2.0,
-    "enc_depth": 2,
+    "mlp_ratio": 4.0,
+    "enc_depth": 4,
     "type_ln": "pre",
     "prediction_day_head": 0,
     "prediction_energy_len": 1

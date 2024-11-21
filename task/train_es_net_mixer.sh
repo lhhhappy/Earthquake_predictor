@@ -45,8 +45,8 @@ cat <<EOF > model_params.json
     "qkv_bias": true,
     "attn_drop": $dropout,
     "proj_drop": $dropout,
-    "mlp_ratio": 2.0,
-    "enc_depth": 2,
+    "mlp_ratio": 4.0,
+    "enc_depth": 4,
     "type_ln": "pre",
     "prediction_day_head": $predict_day_class,
     "prediction_energy_len": $output_window
@@ -54,14 +54,19 @@ cat <<EOF > model_params.json
 EOF
 
 rm -r $LOG_DIR
+
+EXPERIMENTS_DIR="${SAVE_DIR}${Experiment_name}/Hyperparameters"
+mkdir -p $EXPERIMENTS_DIR
+cp "$0" "$EXPERIMENTS_DIR/$(basename $0)"
+
 # Run the training script with specified arguments
 python train.py \
     --data-path $DATA_PATH \
     --model-arch "ES_net_mixer" \
     --energy-loss "mse" \
     --day-loss "None" \
-    --batch-size 4 \
-    --val-batch-size 4 \
+    --batch-size 8 \
+    --val-batch-size 8 \
     --max-epochs 100 \
     --device 1 \
     --lr 1e-4 \
@@ -74,4 +79,4 @@ python train.py \
     --geo-percentage 0.3 \
     --sem-percentage 0.3 \
     --time-resolution $time_resolution \
-    --earthquake-catalog-window $earthquake_history_window_day   
+    --earthquake-catalog-window $earthquake_history_window_day

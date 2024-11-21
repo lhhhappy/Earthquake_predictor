@@ -5,13 +5,13 @@ down_sampling_window: 2
 earthquake_dim: 1
 earthquake_history_window: 100
 embed_dim: 128
-enc_depth: 2
+enc_depth: 4
 geo_num_heads: 2
 gnss_dim: 4
 lape_dim: 30
 lr: 0.0001
 max_epoch: 100
-mlp_ratio: 2.0
+mlp_ratio: 4.0
 model: !!python/name:model.ES_net_mixer.ES_net_mixer ''
 pdm_d_ff: 256
 pdm_d_model: 128
