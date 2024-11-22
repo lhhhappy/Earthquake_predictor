@@ -6,17 +6,19 @@ import pandas as pd
 # 参数设置
 earthquake_start_year = 1980
 station_start_year = 2000
-end_year = 2022
+end_year = 2023
 
 #latmin, latmax, lonmin, lonmax
-#     
-area_dict = {
+"""
     "Ibaraki": [35, 40, 139, 144],  # 茨城县
     "Hokkaido": [40, 45, 141, 147],  # 北海道
     "Miyagi": [37, 42, 140, 145],  # 宫城县
     "Fukushima": [36, 41, 140, 145],  # 福岛
     "Kumamoto": [32, 37, 130, 135],  # 熊本
     "Anchorage": [60, 65, -150, -145],  # 安克雷奇
+""" 
+area_dict = {
+
     "California (Southern)": [32, 37, -120, -115],  # 加州南部
 }
 

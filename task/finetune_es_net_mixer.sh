@@ -1,7 +1,4 @@
-#!/bin/bash
-
-# Set the data path and save directory
-Experiment_name="Finetune_ES_net_mixer_longterm_california"
+Experiment_name="Finetune_ES_net_mixer_california"
 
 DATA_PATH="/home/linhang/workbench/Earthquake_data/"
 
@@ -53,11 +50,16 @@ cat <<EOF > model_params.json
 }
 EOF
 
+# 清理旧日志目录
 rm -r $LOG_DIR
 
+# 创建实验目录
 EXPERIMENTS_DIR="${SAVE_DIR}${Experiment_name}/Hyperparameters"
 mkdir -p $EXPERIMENTS_DIR
+
+# 存储当前脚本文件和 model_params.json 两份
 cp "$0" "$EXPERIMENTS_DIR/$(basename $0)"
+cp model_params.json "$EXPERIMENTS_DIR/model_params.json"
 
 # Run the training script with specified arguments
 python train.py \
@@ -68,8 +70,8 @@ python train.py \
     --batch-size 4 \
     --val-batch-size 4 \
     --max-epochs 100 \
-    --device 1 \
-    --lr 5e-5 \
+    --device 2 \
+    --lr 1e-5 \
     --save-dir $MODEL_DIR \
     --log-dir $LOG_DIR \
     --model_params "model_params.json" \
@@ -80,6 +82,8 @@ python train.py \
     --sem-percentage 0.3 \
     --time-resolution $time_resolution \
     --earthquake-catalog-window $earthquake_history_window_day \
-    --finetune-from-model "Result/ES_net_mixer_longterm_california/checkpoints/last.ckpt" \
+    --finetune-from-model "Result/Pretrain_ES_net_mixer_california/checkpoints/last.ckpt" \
     --start-date "2017-01-01" \
-    --last-date "2023-01-01"
+    --last-date "2023-01-01" \
+    --train-percentage 0.7 \
+    --seed 0

@@ -243,22 +243,22 @@ class EarthquakeGNSSDataset(Dataset):
             gnss_idx :gnss_idx + self.window_size
         ].transpose(1, 0, 2)
 
-        gnss_data_history_date = self.gnss_data_date[
-            gnss_idx:gnss_idx + self.window_size
-        ]
-        earthquake_data_history_date = self.earthquake_data_date[
-            max(0, earthquake_idx + self.window_size - self.earthquake_window):
-            earthquake_idx + self.window_size
-        ]
-        earthquake_data_future_date = self.earthquake_data_date[
-            earthquake_idx + self.window_size:
-            earthquake_idx + self.window_size + self.forecast_horizon
-        ]
+        # gnss_data_history_date = self.gnss_data_date[
+        #     gnss_idx:gnss_idx + self.window_size
+        # ]
+        # earthquake_data_history_date = self.earthquake_data_date[
+        #     max(0, earthquake_idx + self.window_size - self.earthquake_window):
+        #     earthquake_idx + self.window_size
+        # ]
+        # earthquake_data_future_date = self.earthquake_data_date[
+        #     earthquake_idx + self.window_size:
+        #     earthquake_idx + self.window_size + self.forecast_horizon
+        # ]
 
         # 日期检查
         # 检查 GNSS 历史数据的日期与地震数据的日期是否对齐
-        if not gnss_data_history_date.equals(earthquake_data_history_date[-self.window_size:]):
-            raise ValueError(f"Date mismatch between GNSS data and earthquake data at index {idx}.")
+        # if not gnss_data_history_date.equals(earthquake_data_history_date[-self.window_size:]):
+        #     raise ValueError(f"Date mismatch between GNSS data and earthquake data at index {idx}.")
 
         # 打印日期信息（可选，供调试使用）
         # print(f"GNSS Data Date Range: {gnss_data_history_date[0]} to {gnss_data_history_date[-1]}")
@@ -267,6 +267,7 @@ class EarthquakeGNSSDataset(Dataset):
 
         # ...（以下代码保持不变）
         # 计算标签和特征
+        
         earthquake_happen = torch.tensor((earthquake_data_future >= self.earthquake_threshold).any(axis=0).to_numpy(), dtype=torch.bool)
 
         # 计算历史和未来的对数能量

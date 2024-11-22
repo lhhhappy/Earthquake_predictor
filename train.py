@@ -43,6 +43,7 @@ parser.add_argument("--earthquake-catalog-window", type=int, default=14, help='W
 parser.add_argument("--finetune-from-model", type=str, default=None, help='Path to the model to finetune')
 parser.add_argument("--start-date", type=str, default=None, help='Start date for training')
 parser.add_argument("--last-date", type=str, default=None, help='End date for training')
+parser.add_argument("--train-percentage", type=float, default=0.8, help='Percentage of data to use for training')
 
 args = parser.parse_args()
 
@@ -59,7 +60,8 @@ train_dataset, val_dataset = get_dataset(
     time_resolution=args.time_resolution,
     earthquake_catalog_window=args.earthquake_catalog_window,
     start_date=args.start_date,
-    last_date=args.last_date
+    last_date=args.last_date,
+    train_percentage=args.train_percentage
     )
 
 # Define loss function
@@ -97,14 +99,14 @@ else:
 
 # Define checkpoint and learning rate monitor callbacks
 checkpoint_callback = ModelCheckpoint(
-    monitor='val_loss',
+    monitor='Aggregative_Score',
     dirpath=args.save_dir,
     filename='Val-{epoch:02d}-{val_loss:.2f}',
     save_top_k=1,
     mode='min',
     save_last=True,
     verbose=True,
-    every_n_epochs=2
+    every_n_epochs=4
 )
 
 lr_monitor = LearningRateMonitor(logging_interval='step')
@@ -116,9 +118,13 @@ trainer = Trainer(
     logger=pl_loggers.TensorBoardLogger(args.log_dir),
     callbacks=[checkpoint_callback, lr_monitor],
     log_every_n_steps=20,
-)
+    gradient_clip_val=1,
+    gradient_clip_algorithm="norm")
+
 
 if args.finetune_from_model:
-    model.load_from_checkpoint(args.finetune_from_model)
-# Start training
-trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
+    model = LightingModel.load_from_checkpoint(args.finetune_from_model,map_location='cpu',loss_fns=loss_fn)
+    trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
+    
+else:
+    trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)

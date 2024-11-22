@@ -812,7 +812,9 @@ class ES_net_mixer(nn.Module):
             ]
             )       
         self.projection_layer = nn.Linear(self.pdm_d_model, 1,bias=True)
-
+        
+        self.last_layer = torch.exp
+        
     def forward(self, earthquake, gnss_data, es_loc=None, gnss_loc=None, es_lap_mx=None, gnss_lap_mx = None, es_geo_mask=None, es_sem_mask=None, gnss_padding_mask=None,gnss_geo_mask=None):
         B, T, N, C = earthquake.size()
         # Earthquake data embedding
@@ -862,6 +864,7 @@ class ES_net_mixer(nn.Module):
         else:
             day = None
 
+        energy = self.last_layer(energy)
         return energy, day
     
     def future_multi_mixing(self, B, enc_out_list, x_list):

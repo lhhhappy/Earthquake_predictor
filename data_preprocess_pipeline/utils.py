@@ -12,9 +12,9 @@ from scipy.signal import savgol_filter
 from joblib import Parallel, delayed
 
 
-def download_earthquake_data(start_year, end_year, minlatitude, maxlatitude, minlongitude, maxlongitude,save_path,minmagnitude=2.5, maxmagnitude=10):
+def download_earthquake_data(start_year, end_year, minlatitude, maxlatitude, minlongitude, maxlongitude,save_path,minmagnitude=2.5):
     os.makedirs(save_path, exist_ok=True)
-    for year in range(start_year, end_year):
+    for year in range(start_year, end_year + 1):
         box_events = search(starttime=datetime(year, 1, 1, 00, 00), endtime=datetime(year+1, 1, 1, 00, 00),
                     minlatitude=minlatitude, maxlatitude=maxlatitude, minlongitude=minlongitude, maxlongitude=maxlongitude,
                     minmagnitude=minmagnitude, maxmagnitude=10)

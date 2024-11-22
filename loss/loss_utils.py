@@ -131,3 +131,5 @@ def get_loss(energy_loss='nse', day_loss='cross_entropy'):
     else:
         raise ValueError(f"Unknown day loss function: {day_loss}")
     return loss_fns
+
+

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Set the data path and save directory
-Experiment_name="ES_net_mixer_longterm_california"
+Experiment_name="Pretrain_ES_net_mixer_california"
 
 DATA_PATH="/home/linhang/workbench/Earthquake_data/"
 
@@ -34,7 +34,7 @@ cat <<EOF > model_params.json
     "down_sampling_method": "avg",
     "down_sampling_window": 2,
     "down_sampling_layers": 3,
-    "pdm_layers": 2,
+    "pdm_layers": 3,
     "pdm_d_model": $pdm_d_model,
     "pdm_d_ff": $pdm_d_ff,
     "pdm_dropout": $dropout,
@@ -45,19 +45,25 @@ cat <<EOF > model_params.json
     "qkv_bias": true,
     "attn_drop": $dropout,
     "proj_drop": $dropout,
-    "mlp_ratio": 4.0,
-    "enc_depth": 4,
+    "mlp_ratio": 1.0,
+    "enc_depth": 2,
     "type_ln": "pre",
     "prediction_day_head": $predict_day_class,
     "prediction_energy_len": $output_window
 }
 EOF
 
+# 清理旧日志目录
 rm -r $LOG_DIR
-
+rm -r $MODEL_DIR
+# 创建实验目录
 EXPERIMENTS_DIR="${SAVE_DIR}${Experiment_name}/Hyperparameters"
 mkdir -p $EXPERIMENTS_DIR
+
+# 存储当前脚本文件和 model_params.json 两份
 cp "$0" "$EXPERIMENTS_DIR/$(basename $0)"
+cp model_params.json "$EXPERIMENTS_DIR/model_params.json"
+
 
 # Run the training script with specified arguments
 python train.py \
@@ -68,7 +74,7 @@ python train.py \
     --batch-size 4 \
     --val-batch-size 4 \
     --max-epochs 100 \
-    --device 1 \
+    --device 2 \
     --lr 1e-4 \
     --save-dir $MODEL_DIR \
     --log-dir $LOG_DIR \
@@ -79,4 +85,5 @@ python train.py \
     --geo-percentage 0.3 \
     --sem-percentage 0.3 \
     --time-resolution $time_resolution \
-    --earthquake-catalog-window $earthquake_history_window_day
+    --earthquake-catalog-window $earthquake_history_window_day \
+    --train-percentage 0.9 \
