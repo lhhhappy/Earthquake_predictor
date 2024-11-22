@@ -47,7 +47,7 @@ class LightingModel(L.LightningModule):
                 total_grad_norm += param_grad_norm.item() ** 2
         total_grad_norm = total_grad_norm ** 0.5
 
-        self.logger.experiment.add_scalars('grad_norm', {'total': total_grad_norm}, self.global_step)
+        self.log('grad_norm/train', total_grad_norm)
 
     def training_step(self, batch, batch_idx):
         
@@ -90,7 +90,7 @@ class LightingModel(L.LightningModule):
             metrics[k] = v
 
         for k, v in metrics.items():
-            self.logger.experiment.add_scalar(f'{k}/train', v, self.global_step)
+            self.log(f'{k}/train', v, prog_bar=False, logger=True)
 
         return train_loss
     
@@ -136,7 +136,8 @@ class LightingModel(L.LightningModule):
         for k,v in loss_metric.items():
             metrics[k] = v
         for k, v in metrics.items():
-            self.logger.experiment.add_scalar(f'{k}/valid', v, self.global_step)
+            self.log(f'{k}/valid', v, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+            
         self.log("Aggregative_Score", metrics["Aggregative_Score"], on_step=False, on_epoch=True, prog_bar=False, logger=False)
         return val_loss
 

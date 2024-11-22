@@ -103,10 +103,10 @@ checkpoint_callback = ModelCheckpoint(
     dirpath=args.save_dir,
     filename='Val-{epoch:02d}-{val_loss:.2f}',
     save_top_k=1,
-    mode='min',
+    mode='max',
     save_last=True,
     verbose=True,
-    every_n_epochs=4
+    every_n_epochs=1
 )
 
 lr_monitor = LearningRateMonitor(logging_interval='step')
