@@ -104,7 +104,7 @@ else:
 checkpoint_callback = ModelCheckpoint(
     monitor='TPR',
     dirpath=args.save_dir,
-    filename='Val-{epoch:02d}-{Aggregative_Score:.2f}',
+    filename='Val-{epoch:02d}-{TPR:.2f}',
     save_top_k=1,
     mode='max',
     save_last=True,
