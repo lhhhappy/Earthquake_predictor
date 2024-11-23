@@ -1,66 +1,66 @@
 </p>
+<p align="center"><h1 align="center">EARTHQUAKE_PREDICTOR.GIT</h1></p>
 <p align="center">
-    <h1 align="center">EARTHQUAKE_PREDICTOR.GIT</h1>
+	<em><code>❯ REPLACE-ME</code></em>
 </p>
 <p align="center">
-    <em><code>❯ REPLACE-ME</code></em>
+	<img src="https://img.shields.io/github/license/lhhhappy/Earthquake_predictor.git?style=default&logo=opensourceinitiative&logoColor=white&color=c59adc" alt="license">
+	<img src="https://img.shields.io/github/last-commit/lhhhappy/Earthquake_predictor.git?style=default&logo=git&logoColor=white&color=c59adc" alt="last-commit">
+	<img src="https://img.shields.io/github/languages/top/lhhhappy/Earthquake_predictor.git?style=default&color=c59adc" alt="repo-top-language">
+	<img src="https://img.shields.io/github/languages/count/lhhhappy/Earthquake_predictor.git?style=default&color=c59adc" alt="repo-language-count">
+</p>
+<p align="center"><!-- default option, no dependency badges. -->
 </p>
 <p align="center">
-	<img src="https://img.shields.io/github/license/lhhhappy/Earthquake_predictor.git?style=for-the-badge&logo=opensourceinitiative&logoColor=white&color=7400ff" alt="license">
-	<img src="https://img.shields.io/github/last-commit/lhhhappy/Earthquake_predictor.git?style=for-the-badge&logo=git&logoColor=white&color=7400ff" alt="last-commit">
-	<img src="https://img.shields.io/github/languages/top/lhhhappy/Earthquake_predictor.git?style=for-the-badge&color=7400ff" alt="repo-top-language">
-	<img src="https://img.shields.io/github/languages/count/lhhhappy/Earthquake_predictor.git?style=for-the-badge&color=7400ff" alt="repo-language-count">
+	<!-- default option, no dependency badges. -->
 </p>
-<p align="center">
-		<em>Built with the tools and technologies:</em>
-</p>
-<p align="center">
-	<img src="https://img.shields.io/badge/GNU%20Bash-4EAA25.svg?style=for-the-badge&logo=GNU-Bash&logoColor=white" alt="GNU%20Bash">
-	<img src="https://img.shields.io/badge/Jupyter-F37626.svg?style=for-the-badge&logo=Jupyter&logoColor=white" alt="Jupyter">
-	<img src="https://img.shields.io/badge/Python-3776AB.svg?style=for-the-badge&logo=Python&logoColor=white" alt="Python">
-	<img src="https://img.shields.io/badge/JSON-000000.svg?style=for-the-badge&logo=JSON&logoColor=white" alt="JSON">
-</p>
-
 <br>
 
-##### 🔗 Table of Contents
+##  Table of Contents
 
-- [📍 Overview](#-overview)
-- [👾 Features](#-features)
-- [📂 Repository Structure](#-repository-structure)
-- [🧩 Modules](#-modules)
-- [🚀 Getting Started](#-getting-started)
-    - [🔖 Prerequisites](#-prerequisites)
-    - [📦 Installation](#-installation)
-    - [🤖 Usage](#-usage)
-    - [🧪 Tests](#-tests)
-- [📌 Project Roadmap](#-project-roadmap)
-- [🤝 Contributing](#-contributing)
-- [🎗 License](#-license)
-- [🙌 Acknowledgments](#-acknowledgments)
+- [ Overview](#-overview)
+- [ Features](#-features)
+- [ Project Structure](#-project-structure)
+  - [ Project Index](#-project-index)
+- [ Getting Started](#-getting-started)
+  - [ Prerequisites](#-prerequisites)
+  - [ Installation](#-installation)
+  - [ Usage](#-usage)
+  - [ Testing](#-testing)
+- [ Project Roadmap](#-project-roadmap)
+- [ Contributing](#-contributing)
+- [ License](#-license)
+- [ Acknowledgments](#-acknowledgments)
 
 ---
 
-## 📍 Overview
+##  Overview
 
 <code>❯ REPLACE-ME</code>
 
 ---
 
-## 👾 Features
+##  Features
 
 <code>❯ REPLACE-ME</code>
 
 ---
 
-## 📂 Repository Structure
+##  Project Structure
 
 ```sh
 └── Earthquake_predictor.git/
     ├── README.md
+    ├── Result
+    │   ├── Finetune_ES_net_mixer_california
+    │   ├── Pretrain_ES_net_mixer_california
+    │   └── Scratch_ES_net_mixer_california
+    ├── __pycache__
+    │   └── inference_utils.cpython-39.pyc
     ├── data_preprocess_pipeline
     │   ├── __pycache__
     │   ├── pipeline.py
+    │   ├── station_dict_all.pkl
     │   └── utils.py
     ├── dataset
     │   ├── __init__.py
@@ -70,6 +70,9 @@
     ├── experiment
     │   ├── data_preprocess_ipynb
     │   └── data_preprocess_py
+    ├── inference.ipynb
+    ├── inference_utils.py
+    ├── last.ckpt
     ├── loss
     │   ├── __init__.py
     │   ├── __pycache__
@@ -77,108 +80,411 @@
     │   └── loss_utils.py
     ├── model
     │   ├── ES_net.py
+    │   ├── ES_net_mixer.py
     │   ├── Earthquake_net.ipynb
     │   ├── __init__.py
     │   └── __pycache__
     ├── model_params.json
-    ├── station_dict_all.pkl
+    ├── reference_project
+    │   └── timemixer.ipynb
     ├── task
-    │   └── train_es_net.sh
+    │   ├── finetune_es_net_mixer.sh
+    │   ├── scratch_es_net_mixer.sh
+    │   ├── train_es_net.sh
+    │   └── train_es_net_mixer.sh
     └── train.py
 ```
 
+
+###  Project Index
+<details open>
+	<summary><b><code>EARTHQUAKE_PREDICTOR.GIT/</code></b></summary>
+	<details> <!-- __root__ Submodule -->
+		<summary><b>__root__</b></summary>
+		<blockquote>
+			<table>
+			<tr>
+				<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/inference.ipynb'>inference.ipynb</a></b></td>
+				<td><code>❯ REPLACE-ME</code></td>
+			</tr>
+			<tr>
+				<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/model_params.json'>model_params.json</a></b></td>
+				<td><code>❯ REPLACE-ME</code></td>
+			</tr>
+			<tr>
+				<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/inference_utils.py'>inference_utils.py</a></b></td>
+				<td><code>❯ REPLACE-ME</code></td>
+			</tr>
+			<tr>
+				<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/last.ckpt'>last.ckpt</a></b></td>
+				<td><code>❯ REPLACE-ME</code></td>
+			</tr>
+			<tr>
+				<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/train.py'>train.py</a></b></td>
+				<td><code>❯ REPLACE-ME</code></td>
+			</tr>
+			</table>
+		</blockquote>
+	</details>
+	<details> <!-- dataset Submodule -->
+		<summary><b>dataset</b></summary>
+		<blockquote>
+			<table>
+			<tr>
+				<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/dataset/dataset_test.ipynb'>dataset_test.ipynb</a></b></td>
+				<td><code>❯ REPLACE-ME</code></td>
+			</tr>
+			<tr>
+				<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/dataset/dataset_utils.py'>dataset_utils.py</a></b></td>
+				<td><code>❯ REPLACE-ME</code></td>
+			</tr>
+			</table>
+		</blockquote>
+	</details>
+	<details> <!-- experiment Submodule -->
+		<summary><b>experiment</b></summary>
+		<blockquote>
+			<details>
+				<summary><b>data_preprocess_py</b></summary>
+				<blockquote>
+					<table>
+					<tr>
+						<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/experiment/data_preprocess_py/usgs_data_area_save.py'>usgs_data_area_save.py</a></b></td>
+						<td><code>❯ REPLACE-ME</code></td>
+					</tr>
+					<tr>
+						<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/experiment/data_preprocess_py/down_earthquake_data.py'>down_earthquake_data.py</a></b></td>
+						<td><code>❯ REPLACE-ME</code></td>
+					</tr>
+					<tr>
+						<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/experiment/data_preprocess_py/log_energy.py'>log_energy.py</a></b></td>
+						<td><code>❯ REPLACE-ME</code></td>
+					</tr>
+					<tr>
+						<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/experiment/data_preprocess_py/get_aij.py'>get_aij.py</a></b></td>
+						<td><code>❯ REPLACE-ME</code></td>
+					</tr>
+					<tr>
+						<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/experiment/data_preprocess_py/download_GNSS_data.py'>download_GNSS_data.py</a></b></td>
+						<td><code>❯ REPLACE-ME</code></td>
+					</tr>
+					</table>
+				</blockquote>
+			</details>
+			<details>
+				<summary><b>data_preprocess_ipynb</b></summary>
+				<blockquote>
+					<table>
+					<tr>
+						<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/experiment/data_preprocess_ipynb/earthquake_usgs.ipynb'>earthquake_usgs.ipynb</a></b></td>
+						<td><code>❯ REPLACE-ME</code></td>
+					</tr>
+					<tr>
+						<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/experiment/data_preprocess_ipynb/data_preposs_gnss.ipynb'>data_preposs_gnss.ipynb</a></b></td>
+						<td><code>❯ REPLACE-ME</code></td>
+					</tr>
+					<tr>
+						<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/experiment/data_preprocess_ipynb/data_preposs_earthquake.ipynb'>data_preposs_earthquake.ipynb</a></b></td>
+						<td><code>❯ REPLACE-ME</code></td>
+					</tr>
+					<tr>
+						<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/experiment/data_preprocess_ipynb/plot_GNSS.ipynb'>plot_GNSS.ipynb</a></b></td>
+						<td><code>❯ REPLACE-ME</code></td>
+					</tr>
+					<tr>
+						<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/experiment/data_preprocess_ipynb/dataset.ipynb'>dataset.ipynb</a></b></td>
+						<td><code>❯ REPLACE-ME</code></td>
+					</tr>
+					</table>
+				</blockquote>
+			</details>
+		</blockquote>
+	</details>
+	<details> <!-- model Submodule -->
+		<summary><b>model</b></summary>
+		<blockquote>
+			<table>
+			<tr>
+				<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/model/Earthquake_net.ipynb'>Earthquake_net.ipynb</a></b></td>
+				<td><code>❯ REPLACE-ME</code></td>
+			</tr>
+			<tr>
+				<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/model/ES_net_mixer.py'>ES_net_mixer.py</a></b></td>
+				<td><code>❯ REPLACE-ME</code></td>
+			</tr>
+			<tr>
+				<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/model/ES_net.py'>ES_net.py</a></b></td>
+				<td><code>❯ REPLACE-ME</code></td>
+			</tr>
+			</table>
+		</blockquote>
+	</details>
+	<details> <!-- reference_project Submodule -->
+		<summary><b>reference_project</b></summary>
+		<blockquote>
+			<table>
+			<tr>
+				<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/reference_project/timemixer.ipynb'>timemixer.ipynb</a></b></td>
+				<td><code>❯ REPLACE-ME</code></td>
+			</tr>
+			</table>
+		</blockquote>
+	</details>
+	<details> <!-- Result Submodule -->
+		<summary><b>Result</b></summary>
+		<blockquote>
+			<details>
+				<summary><b>Scratch_ES_net_mixer_california</b></summary>
+				<blockquote>
+					<details>
+						<summary><b>logs</b></summary>
+						<blockquote>
+							<details>
+								<summary><b>lightning_logs</b></summary>
+								<blockquote>
+									<details>
+										<summary><b>version_0</b></summary>
+										<blockquote>
+											<table>
+											<tr>
+												<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/Result/Scratch_ES_net_mixer_california/logs/lightning_logs/version_0/events.out.tfevents.1732334234.a800.51804.0'>events.out.tfevents.1732334234.a800.51804.0</a></b></td>
+												<td><code>❯ REPLACE-ME</code></td>
+											</tr>
+											<tr>
+												<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/Result/Scratch_ES_net_mixer_california/logs/lightning_logs/version_0/hparams.yaml'>hparams.yaml</a></b></td>
+												<td><code>❯ REPLACE-ME</code></td>
+											</tr>
+											</table>
+										</blockquote>
+									</details>
+								</blockquote>
+							</details>
+						</blockquote>
+					</details>
+					<details>
+						<summary><b>checkpoints</b></summary>
+						<blockquote>
+							<table>
+							<tr>
+								<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/Result/Scratch_ES_net_mixer_california/checkpoints/Val-epoch=104-Aggregative_Score=0.00.ckpt'>Val-epoch=104-Aggregative_Score=0.00.ckpt</a></b></td>
+								<td><code>❯ REPLACE-ME</code></td>
+							</tr>
+							<tr>
+								<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/Result/Scratch_ES_net_mixer_california/checkpoints/last.ckpt'>last.ckpt</a></b></td>
+								<td><code>❯ REPLACE-ME</code></td>
+							</tr>
+							</table>
+						</blockquote>
+					</details>
+					<details>
+						<summary><b>Hyperparameters</b></summary>
+						<blockquote>
+							<table>
+							<tr>
+								<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/Result/Scratch_ES_net_mixer_california/Hyperparameters/model_params.json'>model_params.json</a></b></td>
+								<td><code>❯ REPLACE-ME</code></td>
+							</tr>
+							<tr>
+								<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/Result/Scratch_ES_net_mixer_california/Hyperparameters/scratch_es_net_mixer.sh'>scratch_es_net_mixer.sh</a></b></td>
+								<td><code>❯ REPLACE-ME</code></td>
+							</tr>
+							</table>
+						</blockquote>
+					</details>
+				</blockquote>
+			</details>
+			<details>
+				<summary><b>Finetune_ES_net_mixer_california</b></summary>
+				<blockquote>
+					<details>
+						<summary><b>logs</b></summary>
+						<blockquote>
+							<details>
+								<summary><b>lightning_logs</b></summary>
+								<blockquote>
+									<details>
+										<summary><b>version_0</b></summary>
+										<blockquote>
+											<table>
+											<tr>
+												<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/Result/Finetune_ES_net_mixer_california/logs/lightning_logs/version_0/events.out.tfevents.1732353976.a800.69753.0'>events.out.tfevents.1732353976.a800.69753.0</a></b></td>
+												<td><code>❯ REPLACE-ME</code></td>
+											</tr>
+											<tr>
+												<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/Result/Finetune_ES_net_mixer_california/logs/lightning_logs/version_0/hparams.yaml'>hparams.yaml</a></b></td>
+												<td><code>❯ REPLACE-ME</code></td>
+											</tr>
+											</table>
+										</blockquote>
+									</details>
+								</blockquote>
+							</details>
+						</blockquote>
+					</details>
+					<details>
+						<summary><b>checkpoints</b></summary>
+						<blockquote>
+							<table>
+							<tr>
+								<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/Result/Finetune_ES_net_mixer_california/checkpoints/last.ckpt'>last.ckpt</a></b></td>
+								<td><code>❯ REPLACE-ME</code></td>
+							</tr>
+							<tr>
+								<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/Result/Finetune_ES_net_mixer_california/checkpoints/Val-epoch=06-TPR=0.03.ckpt'>Val-epoch=06-TPR=0.03.ckpt</a></b></td>
+								<td><code>❯ REPLACE-ME</code></td>
+							</tr>
+							</table>
+						</blockquote>
+					</details>
+					<details>
+						<summary><b>Hyperparameters</b></summary>
+						<blockquote>
+							<table>
+							<tr>
+								<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/Result/Finetune_ES_net_mixer_california/Hyperparameters/model_params.json'>model_params.json</a></b></td>
+								<td><code>❯ REPLACE-ME</code></td>
+							</tr>
+							<tr>
+								<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/Result/Finetune_ES_net_mixer_california/Hyperparameters/finetune_es_net_mixer.sh'>finetune_es_net_mixer.sh</a></b></td>
+								<td><code>❯ REPLACE-ME</code></td>
+							</tr>
+							</table>
+						</blockquote>
+					</details>
+				</blockquote>
+			</details>
+			<details>
+				<summary><b>Pretrain_ES_net_mixer_california</b></summary>
+				<blockquote>
+					<details>
+						<summary><b>logs</b></summary>
+						<blockquote>
+							<details>
+								<summary><b>lightning_logs</b></summary>
+								<blockquote>
+									<details>
+										<summary><b>version_0</b></summary>
+										<blockquote>
+											<table>
+											<tr>
+												<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/Result/Pretrain_ES_net_mixer_california/logs/lightning_logs/version_0/hparams.yaml'>hparams.yaml</a></b></td>
+												<td><code>❯ REPLACE-ME</code></td>
+											</tr>
+											<tr>
+												<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/Result/Pretrain_ES_net_mixer_california/logs/lightning_logs/version_0/events.out.tfevents.1732275008.a800.115371.0'>events.out.tfevents.1732275008.a800.115371.0</a></b></td>
+												<td><code>❯ REPLACE-ME</code></td>
+											</tr>
+											</table>
+										</blockquote>
+									</details>
+								</blockquote>
+							</details>
+						</blockquote>
+					</details>
+					<details>
+						<summary><b>checkpoints</b></summary>
+						<blockquote>
+							<table>
+							<tr>
+								<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/Result/Pretrain_ES_net_mixer_california/checkpoints/last.ckpt'>last.ckpt</a></b></td>
+								<td><code>❯ REPLACE-ME</code></td>
+							</tr>
+							<tr>
+								<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/Result/Pretrain_ES_net_mixer_california/checkpoints/Val-epoch=25-Aggregative_Score=0.35.ckpt'>Val-epoch=25-Aggregative_Score=0.35.ckpt</a></b></td>
+								<td><code>❯ REPLACE-ME</code></td>
+							</tr>
+							</table>
+						</blockquote>
+					</details>
+					<details>
+						<summary><b>Hyperparameters</b></summary>
+						<blockquote>
+							<table>
+							<tr>
+								<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/Result/Pretrain_ES_net_mixer_california/Hyperparameters/model_params.json'>model_params.json</a></b></td>
+								<td><code>❯ REPLACE-ME</code></td>
+							</tr>
+							<tr>
+								<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/Result/Pretrain_ES_net_mixer_california/Hyperparameters/train_es_net_mixer.sh'>train_es_net_mixer.sh</a></b></td>
+								<td><code>❯ REPLACE-ME</code></td>
+							</tr>
+							</table>
+						</blockquote>
+					</details>
+				</blockquote>
+			</details>
+		</blockquote>
+	</details>
+	<details> <!-- task Submodule -->
+		<summary><b>task</b></summary>
+		<blockquote>
+			<table>
+			<tr>
+				<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/task/finetune_es_net_mixer.sh'>finetune_es_net_mixer.sh</a></b></td>
+				<td><code>❯ REPLACE-ME</code></td>
+			</tr>
+			<tr>
+				<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/task/train_es_net.sh'>train_es_net.sh</a></b></td>
+				<td><code>❯ REPLACE-ME</code></td>
+			</tr>
+			<tr>
+				<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/task/scratch_es_net_mixer.sh'>scratch_es_net_mixer.sh</a></b></td>
+				<td><code>❯ REPLACE-ME</code></td>
+			</tr>
+			<tr>
+				<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/task/train_es_net_mixer.sh'>train_es_net_mixer.sh</a></b></td>
+				<td><code>❯ REPLACE-ME</code></td>
+			</tr>
+			</table>
+		</blockquote>
+	</details>
+	<details> <!-- loss Submodule -->
+		<summary><b>loss</b></summary>
+		<blockquote>
+			<table>
+			<tr>
+				<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/loss/loss_utils.py'>loss_utils.py</a></b></td>
+				<td><code>❯ REPLACE-ME</code></td>
+			</tr>
+			<tr>
+				<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/loss/loss_test.ipynb'>loss_test.ipynb</a></b></td>
+				<td><code>❯ REPLACE-ME</code></td>
+			</tr>
+			</table>
+		</blockquote>
+	</details>
+	<details> <!-- data_preprocess_pipeline Submodule -->
+		<summary><b>data_preprocess_pipeline</b></summary>
+		<blockquote>
+			<table>
+			<tr>
+				<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/data_preprocess_pipeline/utils.py'>utils.py</a></b></td>
+				<td><code>❯ REPLACE-ME</code></td>
+			</tr>
+			<tr>
+				<td><b><a href='https://github.com/lhhhappy/Earthquake_predictor.git/blob/master/data_preprocess_pipeline/pipeline.py'>pipeline.py</a></b></td>
+				<td><code>❯ REPLACE-ME</code></td>
+			</tr>
+			</table>
+		</blockquote>
+	</details>
+</details>
+
 ---
+##  Getting Started
 
-## 🧩 Modules
+###  Prerequisites
 
-<details closed><summary>.</summary>
+Before getting started with Earthquake_predictor.git, ensure your runtime environment meets the following requirements:
 
-| File | Summary |
-| --- | --- |
-| [model_params.json](https://github.com/lhhhappy/Earthquake_predictor.git/blob/main/model_params.json) | <code>❯ REPLACE-ME</code> |
-| [train.py](https://github.com/lhhhappy/Earthquake_predictor.git/blob/main/train.py) | <code>❯ REPLACE-ME</code> |
+- **Programming Language:** Python
 
-</details>
 
-<details closed><summary>dataset</summary>
+###  Installation
 
-| File | Summary |
-| --- | --- |
-| [dataset_test.ipynb](https://github.com/lhhhappy/Earthquake_predictor.git/blob/main/dataset/dataset_test.ipynb) | <code>❯ REPLACE-ME</code> |
-| [dataset_utils.py](https://github.com/lhhhappy/Earthquake_predictor.git/blob/main/dataset/dataset_utils.py) | <code>❯ REPLACE-ME</code> |
+Install Earthquake_predictor.git using one of the following methods:
 
-</details>
-
-<details closed><summary>experiment.data_preprocess_py</summary>
-
-| File | Summary |
-| --- | --- |
-| [usgs_data_area_save.py](https://github.com/lhhhappy/Earthquake_predictor.git/blob/main/experiment/data_preprocess_py/usgs_data_area_save.py) | <code>❯ REPLACE-ME</code> |
-| [down_earthquake_data.py](https://github.com/lhhhappy/Earthquake_predictor.git/blob/main/experiment/data_preprocess_py/down_earthquake_data.py) | <code>❯ REPLACE-ME</code> |
-| [log_energy.py](https://github.com/lhhhappy/Earthquake_predictor.git/blob/main/experiment/data_preprocess_py/log_energy.py) | <code>❯ REPLACE-ME</code> |
-| [get_aij.py](https://github.com/lhhhappy/Earthquake_predictor.git/blob/main/experiment/data_preprocess_py/get_aij.py) | <code>❯ REPLACE-ME</code> |
-| [download_GNSS_data.py](https://github.com/lhhhappy/Earthquake_predictor.git/blob/main/experiment/data_preprocess_py/download_GNSS_data.py) | <code>❯ REPLACE-ME</code> |
-
-</details>
-
-<details closed><summary>experiment.data_preprocess_ipynb</summary>
-
-| File | Summary |
-| --- | --- |
-| [earthquake_usgs.ipynb](https://github.com/lhhhappy/Earthquake_predictor.git/blob/main/experiment/data_preprocess_ipynb/earthquake_usgs.ipynb) | <code>❯ REPLACE-ME</code> |
-| [data_preposs_gnss.ipynb](https://github.com/lhhhappy/Earthquake_predictor.git/blob/main/experiment/data_preprocess_ipynb/data_preposs_gnss.ipynb) | <code>❯ REPLACE-ME</code> |
-| [data_preposs_earthquake.ipynb](https://github.com/lhhhappy/Earthquake_predictor.git/blob/main/experiment/data_preprocess_ipynb/data_preposs_earthquake.ipynb) | <code>❯ REPLACE-ME</code> |
-| [plot_GNSS.ipynb](https://github.com/lhhhappy/Earthquake_predictor.git/blob/main/experiment/data_preprocess_ipynb/plot_GNSS.ipynb) | <code>❯ REPLACE-ME</code> |
-| [dataset.ipynb](https://github.com/lhhhappy/Earthquake_predictor.git/blob/main/experiment/data_preprocess_ipynb/dataset.ipynb) | <code>❯ REPLACE-ME</code> |
-
-</details>
-
-<details closed><summary>model</summary>
-
-| File | Summary |
-| --- | --- |
-| [Earthquake_net.ipynb](https://github.com/lhhhappy/Earthquake_predictor.git/blob/main/model/Earthquake_net.ipynb) | <code>❯ REPLACE-ME</code> |
-| [ES_net.py](https://github.com/lhhhappy/Earthquake_predictor.git/blob/main/model/ES_net.py) | <code>❯ REPLACE-ME</code> |
-
-</details>
-
-<details closed><summary>task</summary>
-
-| File | Summary |
-| --- | --- |
-| [train_es_net.sh](https://github.com/lhhhappy/Earthquake_predictor.git/blob/main/task/train_es_net.sh) | <code>❯ REPLACE-ME</code> |
-
-</details>
-
-<details closed><summary>loss</summary>
-
-| File | Summary |
-| --- | --- |
-| [loss_utils.py](https://github.com/lhhhappy/Earthquake_predictor.git/blob/main/loss/loss_utils.py) | <code>❯ REPLACE-ME</code> |
-| [loss_test.ipynb](https://github.com/lhhhappy/Earthquake_predictor.git/blob/main/loss/loss_test.ipynb) | <code>❯ REPLACE-ME</code> |
-
-</details>
-
-<details closed><summary>data_preprocess_pipeline</summary>
-
-| File | Summary |
-| --- | --- |
-| [utils.py](https://github.com/lhhhappy/Earthquake_predictor.git/blob/main/data_preprocess_pipeline/utils.py) | <code>❯ REPLACE-ME</code> |
-| [pipeline.py](https://github.com/lhhhappy/Earthquake_predictor.git/blob/main/data_preprocess_pipeline/pipeline.py) | <code>❯ REPLACE-ME</code> |
-
-</details>
-
----
-
-## 🚀 Getting Started
-
-### 🔖 Prerequisites
-
-**Python**: `version x.y.z`
-
-### 📦 Installation
-
-Build the project from source:
+**Build from source:**
 
 1. Clone the Earthquake_predictor.git repository:
 ```sh
@@ -190,30 +496,22 @@ Build the project from source:
 ❯ cd Earthquake_predictor.git
 ```
 
-3. Install the required dependencies:
-```sh
-❯ pip install -r requirements.txt
-```
+3. Install the project dependencies:
 
-### 🤖 Usage
+echo 'INSERT-INSTALL-COMMAND-HERE'
 
-To run the project, execute the following command:
 
-```sh
-❯ python main.py
-```
 
-### 🧪 Tests
+###  Usage
+Run Earthquake_predictor.git using the following command:
+echo 'INSERT-RUN-COMMAND-HERE'
 
-Execute the test suite using the following command:
-
-```sh
-❯ pytest
-```
+###  Testing
+Run the test suite using the following command:
+echo 'INSERT-TEST-COMMAND-HERE'
 
 ---
-
-## 📌 Project Roadmap
+##  Project Roadmap
 
 - [X] **`Task 1`**: <strike>Implement feature one.</strike>
 - [ ] **`Task 2`**: Implement feature two.
@@ -221,13 +519,11 @@ Execute the test suite using the following command:
 
 ---
 
-## 🤝 Contributing
+##  Contributing
 
-Contributions are welcome! Here are several ways you can contribute:
-
-- **[Report Issues](https://github.com/lhhhappy/Earthquake_predictor.git/issues)**: Submit bugs found or log feature requests for the `Earthquake_predictor.git` project.
-- **[Submit Pull Requests](https://github.com/lhhhappy/Earthquake_predictor.git/blob/main/CONTRIBUTING.md)**: Review open PRs, and submit your own PRs.
-- **[Join the Discussions](https://github.com/lhhhappy/Earthquake_predictor.git/discussions)**: Share your insights, provide feedback, or ask questions.
+- **💬 [Join the Discussions](https://github.com/lhhhappy/Earthquake_predictor.git/discussions)**: Share your insights, provide feedback, or ask questions.
+- **🐛 [Report Issues](https://github.com/lhhhappy/Earthquake_predictor.git/issues)**: Submit bugs found or log feature requests for the `Earthquake_predictor.git` project.
+- **💡 [Submit Pull Requests](https://github.com/lhhhappy/Earthquake_predictor.git/blob/main/CONTRIBUTING.md)**: Review open PRs, and submit your own PRs.
 
 <details closed>
 <summary>Contributing Guidelines</summary>
@@ -266,13 +562,13 @@ Contributions are welcome! Here are several ways you can contribute:
 
 ---
 
-## 🎗 License
+##  License
 
 This project is protected under the [SELECT-A-LICENSE](https://choosealicense.com/licenses) License. For more details, refer to the [LICENSE](https://choosealicense.com/licenses/) file.
 
 ---
 
-## 🙌 Acknowledgments
+##  Acknowledgments
 
 - List any resources, contributors, inspiration, etc. here.
 
