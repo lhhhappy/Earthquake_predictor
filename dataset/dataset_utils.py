@@ -846,8 +846,10 @@ class CombinedEarthquakeGNSSDataset(Dataset):
 
         return batch_data
 
+
 def get_dataset(data_dir, window_size, forecast_horizon, lape_dim, geo_percentage, sem_percentage,
-                time_resolution, earthquake_catalog_window,train_percentage=0.9,start_date=None,last_date=None,minist_threshold=5):
+                time_resolution, earthquake_catalog_window, train_percentage=0.9, val_date=None,
+                start_date=None, last_date=None, minist_threshold=5):
     """
     从指定目录加载数据集，并将每个地区的数据集划分为训练集和验证集。
     
@@ -860,10 +862,8 @@ def get_dataset(data_dir, window_size, forecast_horizon, lape_dim, geo_percentag
     - sem_percentage: 语义掩码的百分比。
     - time_resolution: 时间分辨率。
     - earthquake_catalog_window: 地震目录窗口的大小。
-    
-    返回：
-    - combined_train_dataset: 组合的训练数据集。
-    - combined_val_dataset: 组合的验证数据集。
+    - train_percentage: 训练集比例，默认为 0.9。
+    - val_date: 验证集的起始日期，默认为 None。
     """
     import os
     import pickle
@@ -929,12 +929,23 @@ def get_dataset(data_dir, window_size, forecast_horizon, lape_dim, geo_percentag
                 last_date=last_date,
             )
             
-            # 将该地区的数据集划分为训练集和验证集
+            # 验证集划分：比例切分或日期切分
             total_length = len(area_dataset)
-            train_size = int(train_percentage * total_length)
             indices = list(range(total_length))
-            train_indices = indices[:train_size]
-            val_indices = indices[train_size:]
+            
+            if val_date is not None:
+                # 按日期划分
+                print(f"使用日期 {val_date} 划分验证集。")
+                val_date = pd.Timestamp(val_date)
+                val_date_index = area_dataset.gnss_data_date.get_indexer([val_date], method='bfill')[0]
+                val_index_start = max(0, val_date_index - area_dataset.start_index - area_dataset.forecast_horizon + 1 - window_size)
+                train_indices = indices[:val_index_start]
+                val_indices = indices[val_index_start:]
+            else:
+                # 按比例划分
+                train_size = int(train_percentage * total_length)
+                train_indices = indices[:train_size]
+                val_indices = indices[train_size:]
             
             # 创建训练集和验证集的 Subset 实例
             train_subset = Subset(area_dataset, train_indices)

@@ -43,6 +43,8 @@ parser.add_argument("--earthquake-catalog-window", type=int, default=14, help='W
 parser.add_argument("--finetune-from-model", type=str, default=None, help='Path to the model to finetune')
 parser.add_argument("--start-date", type=str, default=None, help='Start date for training')
 parser.add_argument("--last-date", type=str, default=None, help='End date for training')
+parser.add_argument("--val-date", type=str, default=None, help='Date for validation')
+
 parser.add_argument("--train-percentage", type=float, default=0.8, help='Percentage of data to use for training')
 
 args = parser.parse_args()
@@ -61,6 +63,7 @@ train_dataset, val_dataset = get_dataset(
     earthquake_catalog_window=args.earthquake_catalog_window,
     start_date=args.start_date,
     last_date=args.last_date,
+    val_date=args.val_date,
     train_percentage=args.train_percentage
     )
 
@@ -99,9 +102,9 @@ else:
 
 # Define checkpoint and learning rate monitor callbacks
 checkpoint_callback = ModelCheckpoint(
-    monitor='Aggregative_Score',
+    monitor='TPR',
     dirpath=args.save_dir,
-    filename='Val-{epoch:02d}-{val_loss:.2f}',
+    filename='Val-{epoch:02d}-{Aggregative_Score:.2f}',
     save_top_k=1,
     mode='max',
     save_last=True,

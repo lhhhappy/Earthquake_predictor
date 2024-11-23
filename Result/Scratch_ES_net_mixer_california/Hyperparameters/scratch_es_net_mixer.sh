@@ -54,8 +54,8 @@ cat <<EOF > model_params.json
 EOF
 
 # 清理旧日志目录
-rm -r $LOG_DIR
-rm -r $MODEL_DIR
+rm -r "${SAVE_DIR}${Experiment_name}/"
+
 # 创建实验目录
 EXPERIMENTS_DIR="${SAVE_DIR}${Experiment_name}/Hyperparameters"
 mkdir -p $EXPERIMENTS_DIR
@@ -87,7 +87,8 @@ python train.py \
     --time-resolution $time_resolution \
     --earthquake-catalog-window $earthquake_history_window_day \
     --start-date "2017-01-01" \
-    --last-date "2023-01-01" \
+    --last-date "2024-01-01" \
+    --val-date "2021-09-04" \
     --train-percentage 0.7 \
     --seed 0
 

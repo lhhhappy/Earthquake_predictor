@@ -84,6 +84,6 @@ python train.py \
     --earthquake-catalog-window $earthquake_history_window_day \
     --finetune-from-model "Result/Pretrain_ES_net_mixer_california/checkpoints/last.ckpt" \
     --start-date "2017-01-01" \
-    --last-date "2023-01-01" \
-    --train-percentage 0.7 \
+    --last-date "2024-01-01" \
+    --val-date "2021-09-04" \
     --seed 0

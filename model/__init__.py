@@ -136,9 +136,9 @@ class LightingModel(L.LightningModule):
         for k,v in loss_metric.items():
             metrics[k] = v
         for k, v in metrics.items():
-            self.log(f'{k}/valid', v, on_step=False, on_epoch=True, prog_bar=True, logger=True)
-            
-        self.log("Aggregative_Score", metrics["Aggregative_Score"], on_step=False, on_epoch=True, prog_bar=False, logger=False)
+            self.log(f'{k}/valid', v, prog_bar=False, logger=True)
+
+        self.log("TPR", metrics["TPR"], prog_bar=False, logger=False)
         return val_loss
 
         
