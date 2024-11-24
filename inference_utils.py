@@ -27,7 +27,7 @@ def calculate_earthquake_threshold(energy_predict_all,earthquake_future_all,thre
     earthquake_happen_real = (earthquake_future_all>threshold)
     return earthquake_happen_predict,earthquake_happen_real
 
-def plot_confusion_matrix(energy_predict_all, earthquake_happen_all, threshold = 3.5):
+def plot_confusion_matrix(energy_predict_all, earthquake_happen_all, threshold = 3.29):
     """
     计算并绘制混淆矩阵，同时打印各类评估指标。
     

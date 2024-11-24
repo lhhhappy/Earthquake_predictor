@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # Set the data path and save directory
-Experiment_name="Scratch_ES_net_mixer_california"
+Experiment_name="Scratch_ES_net_mixer_california_Light_tssloss"
 
 DATA_PATH="/home/linhang/workbench/Earthquake_data/"
 
-SAVE_DIR="/home/linhang/workbench/workbench/Earthquake_predictor/Result/"
+SAVE_DIR="/home/linhang/workbench/workbench/Earthquake_predictor/Result/Scratch/"
 
 LOG_DIR="${SAVE_DIR}${Experiment_name}/logs"
 MODEL_DIR="${SAVE_DIR}${Experiment_name}/checkpoints"
@@ -16,8 +16,8 @@ predict_window=14
 time_resolution=14
 gnss_history_window=140
 earthquake_history_window_day=1400
-pdm_d_model=128
-dropout=0.1
+pdm_d_model=32
+dropout=0.3
 
 output_window=$((predict_window / time_resolution))
 predict_day_class=0
@@ -34,7 +34,7 @@ cat <<EOF > model_params.json
     "down_sampling_method": "avg",
     "down_sampling_window": 2,
     "down_sampling_layers": 3,
-    "pdm_layers": 3,
+    "pdm_layers": 2,
     "pdm_d_model": $pdm_d_model,
     "pdm_d_ff": $pdm_d_ff,
     "pdm_dropout": $dropout,
@@ -46,7 +46,7 @@ cat <<EOF > model_params.json
     "attn_drop": $dropout,
     "proj_drop": $dropout,
     "mlp_ratio": 1.0,
-    "enc_depth": 2,
+    "enc_depth": 1,
     "type_ln": "pre",
     "prediction_day_head": $predict_day_class,
     "prediction_energy_len": $output_window
@@ -69,13 +69,13 @@ cp model_params.json "$EXPERIMENTS_DIR/model_params.json"
 python train.py \
     --data-path $DATA_PATH \
     --model-arch "ES_net_mixer" \
-    --energy-loss "mse" \
+    --energy-loss "tss" \
     --day-loss "None" \
     --batch-size 4 \
     --val-batch-size 4 \
     --max-epochs 400 \
-    --device 2 \
-    --lr 1e-4 \
+    --device 1 \
+    --lr 5e-5 \
     --save-dir $MODEL_DIR \
     --log-dir $LOG_DIR \
     --model_params "model_params.json" \

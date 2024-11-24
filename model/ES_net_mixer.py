@@ -483,6 +483,7 @@ class MultiScaleFusionModule(nn.Module):
         output = self.output_layer(fused_feature)  # [B, N, output_dim]
         
         return output
+    
 class Mlp(nn.Module):
     def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
         super().__init__()
@@ -602,9 +603,6 @@ class STEncoderBlock(nn.Module):
             x = self.norm2(x + self.drop_path(self.mlp(x)))
         return x
 
-import torch
-import torch.nn.functional as F
-
 class CustomCrossAttentionNetwork(torch.nn.Module):
     def __init__(self, d_model):
         super(CustomCrossAttentionNetwork, self).__init__()
@@ -614,10 +612,21 @@ class CustomCrossAttentionNetwork(torch.nn.Module):
         self.v_conv = torch.nn.Conv1d(d_model, d_model, kernel_size=1)
         self.scale = d_model ** -0.5
 
+        # LayerNorm for enc1 and enc2
+        self.layernorm_enc1 = torch.nn.LayerNorm(d_model)
+        self.layernorm_enc2 = torch.nn.LayerNorm(d_model)
+
+        # Final LayerNorm for output
+        self.layernorm_out = torch.nn.LayerNorm(d_model)
+
     def forward(self, enc1, enc2):
         # enc1: (B, N1, d_model), enc2: (B, N2, d_model)
         B, N1, d_model = enc1.size()
         B, N2, _ = enc2.size()
+
+        # Apply LayerNorm to enc1 and enc2
+        enc1 = self.layernorm_enc1(enc1)  # (B, N1, d_model)
+        enc2 = self.layernorm_enc2(enc2)  # (B, N2, d_model)
 
         # Reshape for conv1d: (B, d_model, N)
         enc1 = enc1.permute(0, 2, 1)  # (B, d_model, N1)
@@ -640,14 +649,14 @@ class CustomCrossAttentionNetwork(torch.nn.Module):
         # Weighted sum of values based on attention weights
         attn_output = torch.bmm(attn_weights, v)  # (B, N1, d_model)
 
-        # Add residual connection and normalization (ensure enc1 matches attn_output)
+        # Add residual connection and apply LayerNorm to the output
         enc1_residual = enc1.permute(0, 2, 1)  # Convert back to (B, N1, d_model)
-        
-        if enc1_residual.size() != attn_output.size():
-            raise ValueError(f"Shape mismatch: enc1_residual {enc1_residual.size()} vs attn_output {attn_output.size()}")
 
-        output = attn_output + enc1_residual  # Adding original enc1
+        # Combine attn_output and residual, then normalize
+        output = self.layernorm_out(attn_output + enc1_residual)
         return output
+    
+
 
 class RevIN(nn.Module):
     def __init__(self, num_features, eps=1e-5, affine=True):
@@ -689,7 +698,8 @@ class ES_net_mixer(nn.Module):
                  pdm_layers=2, pdm_d_model=64, pdm_d_ff=128, 
                  pdm_dropout=0.1, pdm_decomp_method='moving_avg', pdm_moving_avg_kernel=3, 
                  geo_num_heads=4, sem_num_heads=4, qkv_bias=False, attn_drop=0., proj_drop=0.,
-                 mlp_ratio=4., enc_depth=2,type_ln="pre", prediction_day_head=1 , prediction_energy_len = 1):
+                 mlp_ratio=4., enc_depth=2,type_ln="pre", prediction_day_head=1 , prediction_energy_len = 1,
+                 use_rev_in=False):
         super(ES_net_mixer, self).__init__()
         
         self.earthquake_dim = earthquake_dim
@@ -813,9 +823,18 @@ class ES_net_mixer(nn.Module):
             )       
         self.projection_layer = nn.Linear(self.pdm_d_model, 1,bias=True)
         
-        self.last_layer = torch.exp
+        self.last_layer = nn.Softplus() ##fix softplus
+        self.use_rev_in = use_rev_in
         
+        if use_rev_in:
+            self.rev_in_es = RevIN(earthquake_dim)
+            self.rev_in_gnss = RevIN(gnss_dim)
+            
+
     def forward(self, earthquake, gnss_data, es_loc=None, gnss_loc=None, es_lap_mx=None, gnss_lap_mx = None, es_geo_mask=None, es_sem_mask=None, gnss_padding_mask=None,gnss_geo_mask=None):
+
+        if self.use_rev_in:
+            earthquake = self.rev_in_es(earthquake, mode='norm')
         B, T, N, C = earthquake.size()
         # Earthquake data embedding
         earthquake_list = self.multi_resolution_time_downsampling(earthquake)
@@ -823,7 +842,6 @@ class ES_net_mixer(nn.Module):
         earthquake_enc_list = []
         for i in range(len(earthquake_list)):
             earthquake_enc = self.earthquake_embedding(earthquake_list[i], es_lap_mx, es_loc)
-            
             earthquake_enc_list.append(earthquake_enc)
         # Apply PDM blocks to the multi-resolution earthquake encodings
         for i in range(len(self.pdm_blocks)):
@@ -834,9 +852,13 @@ class ES_net_mixer(nn.Module):
         earthquake_enc = self.future_multi_mixing(B, earthquake_enc_list, earthquake_list)
 
         earthquake_enc = torch.stack(earthquake_enc, dim=-1).sum(-1)
+
         # GNSS data embedding
         gnss_trend = gnss_data[:,:,:,:self.gnss_dim]
         gnss_season = gnss_data[:,:,:,self.gnss_dim:]
+        if self.use_rev_in:
+            gnss_trend = self.rev_in_gnss(gnss_trend, mode='norm')
+            gnss_season = self.rev_in_gnss(gnss_season, mode='norm')
         gnss_trend = self.gnss_embedding_trend(gnss_trend, gnss_lap_mx, gnss_loc)
         gnss_season = self.gnss_embedding_season(gnss_season, gnss_lap_mx, gnss_loc)
 
@@ -856,15 +878,16 @@ class ES_net_mixer(nn.Module):
         
         #Cross-attention between earthquake and GNSS data
         ENC = self.cross_attention_network(earthquake_enc, gnss_enc)
-
         energy = self.predict_energy_head(ENC)
         
         if self.prediction_day_head != 0:
             day = self.predict_day_head(ENC)
         else:
             day = None
-
         energy = self.last_layer(energy)
+
+        if self.use_rev_in:
+            energy = self.rev_in_es(energy, mode='denorm')
         return energy, day
     
     def future_multi_mixing(self, B, enc_out_list, x_list):
@@ -872,9 +895,7 @@ class ES_net_mixer(nn.Module):
         dec_out_list = []
         
         for i, enc_out in zip(range(len(x_list)), enc_out_list):
-            
             dec_out = self.predict_layers[i](enc_out.permute(0, 2, 3, 1)).permute(0, 3, 1, 2).contiguous()
-
             dec_out = self.projection_layer(dec_out)
             dec_out = dec_out.squeeze(-1).permute(0, 2, 1)
             dec_out_list.append(dec_out)

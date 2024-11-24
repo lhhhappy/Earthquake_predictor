@@ -2,6 +2,10 @@ import torch
 import lightning as L
 from .ES_net import ES_net
 from .ES_net_mixer import ES_net_mixer
+import torch.nn as nn
+from .Mlpbaseline import Mlpbaseline
+
+
 
 def cuda_dict(d,model_device):
     for k, v in d.items():
@@ -22,7 +26,7 @@ class LightingModel(L.LightningModule):
         self.save_hyperparameters()
 
         self.aggregative_score = AggregativeScoreLoss(threshold=3)
-
+        self.nnse_loss = NNSELoss()
     def compute_loss(self, energy_predict, log_energy_future, day_predict, earthquake_data_future_day):
         loss_metrics = {}
         total_loss = 0.0
@@ -36,6 +40,8 @@ class LightingModel(L.LightningModule):
                 continue
             total_loss += loss
             loss_metrics[name] = loss.item()
+        nnse_loss = self.nnse_loss(energy_predict, log_energy_future)
+        loss_metrics['nnse_loss'] = nnse_loss.item()
         return total_loss, loss_metrics
     
     def on_after_backward(self):
@@ -294,3 +300,36 @@ class AggregativeScoreLoss:
             "Aggregative_Score": Aggregative_Score
         }
         return metrics
+    
+class NNSELoss(nn.Module):
+    """
+    Negative Nash-Sutcliffe Efficiency (NNSE) Loss.
+    """
+    def __init__(self):
+        super(NNSELoss, self).__init__()
+
+    def forward(self, energy_predict, earthquake_target):
+        """
+        Args:
+            energy_predict (torch.Tensor): Predicted energy values, shape (B, *).
+            earthquake_target (torch.Tensor): Ground truth energy values, shape (B, *).
+
+        Returns:
+            torch.Tensor: Computed NNSE loss.
+        """
+        # Flatten the inputs to ensure 1D computation
+        energy_predict = energy_predict.flatten()
+        earthquake_target = earthquake_target.flatten()
+
+        # Compute the numerator (sum of squared errors)
+        numerator = torch.sum(torch.pow(earthquake_target - energy_predict, 2))
+        # Compute the denominator (sum of squared deviations from the mean)
+        denominator = torch.sum(torch.pow(earthquake_target - torch.mean(earthquake_target), 2))
+
+        # Compute the Nash-Sutcliffe Efficiency (NSE)
+        nse = 1 - (numerator / denominator)
+
+        # Compute the NNSE loss
+        nnse = 1 / (2 - nse)
+
+        return nnse

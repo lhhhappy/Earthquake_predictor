@@ -73,7 +73,37 @@ class MSELoss(nn.Module):
         mse = torch.mean((predictions - targets) ** 2)
 
         return mse
+    
+class TSSLoss(nn.Module):
+    def __init__(self, threshold, lambda_weight=10, alpha=1.0, gamma=10.0, smooth_type="sigmoid"):
+        super(TSSLoss, self).__init__()
+        self.threshold = threshold
+        self.lambda_weight = lambda_weight
+        self.alpha = alpha
+        self.gamma = gamma
+        self.smooth_type = smooth_type
+        self.mse = nn.MSELoss()
+    
+    def forward(self, y_pred, y_true):
 
+        mse_loss = self.mse(y_pred, y_true)
+        same_side = ((y_pred - self.threshold) * (y_true - self.threshold)) >= 0
+        diff_side = ~same_side
+        penalty = torch.zeros_like(y_pred)
+        penalty[diff_side] = self._smooth_function(torch.abs(y_pred[diff_side] - self.threshold))
+        cross_boundary_penalty = penalty * self.alpha * torch.abs(y_pred - self.threshold)
+        classification_loss = cross_boundary_penalty.mean()
+        total_loss = mse_loss + self.lambda_weight * classification_loss
+
+        return total_loss
+    
+    def _smooth_function(self, x):
+        if self.smooth_type == "sigmoid":
+            return torch.sigmoid(self.gamma * x)
+        elif self.smooth_type == "tanh":
+            return (torch.tanh(self.gamma * x) + 1) / 2
+        else:
+            raise ValueError("Unsupported smooth type. Choose 'sigmoid' or 'tanh'.")
 
 class CustomCrossEntropyLoss(nn.Module):
     """
@@ -122,6 +152,8 @@ def get_loss(energy_loss='nse', day_loss='cross_entropy'):
         loss_fns['energy_loss'] = NNSELoss()
     elif energy_loss == 'mse':
         loss_fns['energy_loss'] = MSELoss()
+    elif energy_loss == 'tss':
+        loss_fns['energy_loss'] = TSSLoss(threshold=3.29)
     else:
         raise ValueError(f"Unknown energy loss function: {energy_loss}")
     if day_loss == 'cross_entropy':
