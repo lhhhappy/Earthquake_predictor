@@ -114,6 +114,7 @@ class DataEmbedding(nn.Module):
         x += self.location_embedding(loc)
         x = self.dropout(x)
         return x
+    
 class MultiResolutionTimeDownsampling(nn.Module):
     def __init__(self, down_sampling_method='avg', down_sampling_window=2, down_sampling_layers=3):
         super(MultiResolutionTimeDownsampling, self).__init__()
@@ -884,10 +885,14 @@ class ES_net_mixer(nn.Module):
             day = self.predict_day_head(ENC)
         else:
             day = None
-        energy = self.last_layer(energy)
+        energy = self.last_layer(energy) #B, N, 1
 
         if self.use_rev_in:
+            energy = energy.permute(0, 2, 1)
+            energy = energy.unsqueeze(-1)
             energy = self.rev_in_es(energy, mode='denorm')
+            energy = energy.squeeze(-1)
+            energy = energy.permute(0, 2, 1)
         return energy, day
     
     def future_multi_mixing(self, B, enc_out_list, x_list):
@@ -919,6 +924,7 @@ class series_decomp(nn.Module):
         res = x - moving_mean
         return res, moving_mean
     
+    
 if __name__ == "__main__":
     batch_size = 2
     input_window = 1400
@@ -946,6 +952,6 @@ if __name__ == "__main__":
                     pdm_layers=2, pdm_d_model=64, pdm_d_ff=128, 
                     pdm_dropout=0.1, pdm_decomp_method='moving_avg', pdm_moving_avg_kernel=3, 
                     geo_num_heads=4, sem_num_heads=4, qkv_bias=False, attn_drop=0., proj_drop=0.,
-                    mlp_ratio=4., enc_depth=2,type_ln="pre",prediction_day_head=15,prediction_energy_len=240)
+                    mlp_ratio=4., enc_depth=2,type_ln="pre",prediction_day_head=15,prediction_energy_len=240,use_rev_in=True)
     energy, day = model(earthquake=x, gnss_data=gnss_data, es_loc=es_loc, gnss_loc=gnss_loc, es_lap_mx=es_lap_mx, gnss_lap_mx=gnss_lap_mx, es_geo_mask=geo_mask, es_sem_mask=sem_mask, gnss_padding_mask=None,gnss_geo_mask=gnss_geo_mask)
     print(energy.shape, day.shape)

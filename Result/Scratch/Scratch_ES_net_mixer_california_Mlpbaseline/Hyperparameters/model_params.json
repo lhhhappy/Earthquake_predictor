@@ -1,0 +1,10 @@
+{
+    "earthquake_dim": 1,
+    "gnss_dim": 4,
+    "embed_dim": 256,
+    "earthquake_history_window": 100,
+    "gnss_history_window": 140,
+    "gnss_station_num": 177,
+    "earthquake_num": 100,
+    "dropout": 0.3
+}

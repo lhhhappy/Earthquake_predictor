@@ -85,29 +85,39 @@ def plot_confusion_matrix(energy_predict_all, earthquake_happen_all, threshold =
 
 
 
-def plot_error(energy_predict,earthquake_target,error): 
-    plt.figure(figsize=(10, 10))
-    plt.scatter(earthquake_target,energy_predict, alpha=0.6, label="Data points")
+def plot_error(energy_predict, earthquake_target, error): 
+    plt.figure(figsize=(12, 10))
+    
+    # 绘制散点图，颜色与 Real Log Energy 大小相关
+    scatter = plt.scatter(
+        earthquake_target, energy_predict, 
+        c=earthquake_target, cmap='coolwarm', 
+        alpha=0.6, label="Data points"
+    )
 
     # 绘制基准线 y = x
     x = np.linspace(0, 7, 100)
     plt.plot(x, x, color="purple", linestyle="-", label="y=x")
 
     # 绘制 10% 误差线
-    plt.plot(x, (1+error) * x, color="gray", linestyle="--", label=f"{error*100}% error bounds")
-    plt.plot(x, (1-error) * x, color="gray", linestyle="--")
+    plt.plot(x, (1 + error) * x, color="gray", linestyle="--", label=f"{error * 100}% error bounds")
+    plt.plot(x, (1 - error) * x, color="gray", linestyle="--")
 
     # 填充误差范围
-    plt.fill_between(x, (1-error) * x, (1+error) * x, color="gray", alpha=0.2)
+    plt.fill_between(x, (1 - error) * x, (1 + error) * x, color="gray", alpha=0.2)
 
     # 图表设置
     plt.xlabel("Real Log Energy", fontsize=14)
     plt.ylabel("Predicted Log Energy", fontsize=14)
-    plt.title(f"Scatter Error", fontsize=16)
+    plt.title("Scatter Error", fontsize=16)
     plt.legend(fontsize=12)
     plt.grid(alpha=0.3)
     plt.xlim(-0.2, 7)
     plt.ylim(-0.2, 7)
+
+    # 添加颜色条
+    cbar = plt.colorbar(scatter)
+    cbar.set_label("Real Log Energy", fontsize=12)
 
     # 显示图表
     plt.show()

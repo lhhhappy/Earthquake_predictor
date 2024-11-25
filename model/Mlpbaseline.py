@@ -6,7 +6,7 @@ import torch.nn.functional as F
 class Mlpbaseline(nn.Module):
     def __init__(self, earthquake_dim, gnss_dim, embed_dim=64, 
                  earthquake_history_window=1400, gnss_history_window=140, 
-                 gnss_station_num=30, earthquake_num=30):
+                 gnss_station_num=30, earthquake_num=30,dropout=0.5):
         super(Mlpbaseline, self).__init__()
         
         # 定义处理地震数据的 MLP，每个地震事件独立处理
@@ -14,10 +14,10 @@ class Mlpbaseline(nn.Module):
             nn.Flatten(),
             nn.Linear(earthquake_history_window * earthquake_dim, embed_dim),
             nn.ReLU(),
-            nn.Dropout(0.5),
+            nn.Dropout(dropout),
             nn.Linear(embed_dim, embed_dim),
             nn.ReLU(),
-            nn.Dropout(0.5)
+            nn.Dropout(dropout)
         )
         
         # 定义处理 GNSS 数据的 MLP，每个站点独立处理
@@ -25,17 +25,17 @@ class Mlpbaseline(nn.Module):
             nn.Flatten(),
             nn.Linear(gnss_history_window * 2 * gnss_dim, embed_dim),
             nn.ReLU(),
-            nn.Dropout(0.5),
+            nn.Dropout(dropout),
             nn.Linear(embed_dim, embed_dim),
             nn.ReLU(),
-            nn.Dropout(0.5)
+            nn.Dropout(dropout)
         )
         
         # 定义输出层
         self.output_mlp = nn.Sequential(
             nn.Linear(embed_dim * 2, embed_dim),
             nn.ReLU(),
-            nn.Dropout(0.5),
+            nn.Dropout(dropout),
             nn.Linear(embed_dim, 1)
         )
         self.gnss_station_num = gnss_station_num

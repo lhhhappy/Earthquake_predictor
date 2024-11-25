@@ -2,8 +2,9 @@ import torch
 import lightning as L
 from .ES_net import ES_net
 from .ES_net_mixer import ES_net_mixer
-import torch.nn as nn
 from .Mlpbaseline import Mlpbaseline
+import torch.nn as nn
+
 
 
 
@@ -25,7 +26,7 @@ class LightingModel(L.LightningModule):
         
         self.save_hyperparameters()
 
-        self.aggregative_score = AggregativeScoreLoss(threshold=3)
+        self.aggregative_score = AggregativeScoreLoss(threshold=3.29)
         self.nnse_loss = NNSELoss()
     def compute_loss(self, energy_predict, log_energy_future, day_predict, earthquake_data_future_day):
         loss_metrics = {}
@@ -199,7 +200,7 @@ class LightingModel(L.LightningModule):
     
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.max_epoch, eta_min=1e-6)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.max_epoch, eta_min=1e-7)
         return [optimizer], [scheduler]
     
     def forward(self, batch, batch_idx = None):

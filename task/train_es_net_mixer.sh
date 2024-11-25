@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Set the data path and save directory
-Experiment_name="Pretrain_ES_net_mixer_california"
+Experiment_name="Pretrain_ES_net_mixer_all_area"
 
 DATA_PATH="/home/linhang/workbench/Earthquake_data/"
 
@@ -16,8 +16,8 @@ predict_window=14
 time_resolution=14
 gnss_history_window=140
 earthquake_history_window_day=1400
-pdm_d_model=128
-dropout=0.1
+pdm_d_model=64
+dropout=0.2
 
 output_window=$((predict_window / time_resolution))
 predict_day_class=0
@@ -69,13 +69,13 @@ cp model_params.json "$EXPERIMENTS_DIR/model_params.json"
 python train.py \
     --data-path $DATA_PATH \
     --model-arch "ES_net_mixer" \
-    --energy-loss "mse" \
+    --energy-loss "tss" \
     --day-loss "None" \
     --batch-size 4 \
     --val-batch-size 4 \
     --max-epochs 100 \
-    --device 2 \
-    --lr 1e-4 \
+    --device 1 \
+    --lr 2e-5 \
     --save-dir $MODEL_DIR \
     --log-dir $LOG_DIR \
     --model_params "model_params.json" \
@@ -86,4 +86,5 @@ python train.py \
     --sem-percentage 0.3 \
     --time-resolution $time_resolution \
     --earthquake-catalog-window $earthquake_history_window_day \
-    --train-percentage 0.9 \
+    --train-percentage 0.8 \
+    --use-area "all" 

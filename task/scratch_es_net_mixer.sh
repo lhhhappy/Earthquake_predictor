@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Set the data path and save directory
-Experiment_name="Scratch_ES_net_mixer_california_Light_tssloss"
+Experiment_name="Scratch_ES_net_mixer_california_tssloss_use_revin"
 
 DATA_PATH="/home/linhang/workbench/Earthquake_data/"
 
@@ -49,7 +49,9 @@ cat <<EOF > model_params.json
     "enc_depth": 1,
     "type_ln": "pre",
     "prediction_day_head": $predict_day_class,
-    "prediction_energy_len": $output_window
+    "prediction_energy_len": $output_window,
+    "use_rev_in": true
+
 }
 EOF
 
@@ -90,5 +92,6 @@ python train.py \
     --last-date "2024-01-01" \
     --val-date "2021-09-04" \
     --train-percentage 0.7 \
-    --seed 0
+    --seed 0 \
+    --use-area "California (Southern)"
 

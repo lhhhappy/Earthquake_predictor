@@ -1,7 +1,7 @@
 # train.py
 import json
 from torch.utils.data import DataLoader
-from model import ES_net, ES_net_mixer
+from model import ES_net, ES_net_mixer, Mlpbaseline
 from argparse import ArgumentParser
 from lightning.pytorch import loggers as pl_loggers
 import lightning as L
@@ -44,9 +44,8 @@ parser.add_argument("--finetune-from-model", type=str, default=None, help='Path 
 parser.add_argument("--start-date", type=str, default=None, help='Start date for training')
 parser.add_argument("--last-date", type=str, default=None, help='End date for training')
 parser.add_argument("--val-date", type=str, default=None, help='Date for validation')
-
 parser.add_argument("--train-percentage", type=float, default=0.8, help='Percentage of data to use for training')
-
+parser.add_argument("--use-area", type=str, default=None, help='Area to use for training')
 args = parser.parse_args()
 
 # Load dataset
@@ -64,7 +63,8 @@ train_dataset, val_dataset = get_dataset(
     start_date=args.start_date,
     last_date=args.last_date,
     val_date=args.val_date,
-    train_percentage=args.train_percentage
+    train_percentage=args.train_percentage,
+    use_area=args.use_area
     )
 
 # Define loss function
@@ -84,7 +84,8 @@ with open(args.model_params, 'r') as f:
 
 model_arch_dict = {
     "ES_net": ES_net,
-    "ES_net_mixer": ES_net_mixer
+    "ES_net_mixer": ES_net_mixer,
+    "Mlpbaseline": Mlpbaseline
 }
 
 # Initialize the model
