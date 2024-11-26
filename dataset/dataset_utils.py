@@ -14,6 +14,7 @@ from scipy.signal import savgol_filter
 import copy
 from functools import lru_cache
 from torch.utils.data import Subset
+from torch.utils.data import DataLoader
 
 def normalize(data, method='min-max'):
     """
@@ -876,12 +877,54 @@ def get_dataset(data_dir, window_size, forecast_horizon, lape_dim, geo_percentag
         val_datasets = {}
 
     for area in area_list:
-        # 加载数据的代码保持不变
-        
-        # 创建该地区的 EarthquakeGNSSDataset 实例
-        area_dataset = EarthquakeGNSSDataset(
-            # 参数列表保持不变
-        )
+        data_path = os.path.join(data_dir, area)
+        try:
+            gnss_data = pd.read_csv(
+                os.path.join(data_path, "gnss_data.csv"),
+                index_col=0, parse_dates=True, low_memory=False
+            ).map(parse_str_list)
+            earthquake_data = pd.read_csv(
+                os.path.join(data_path, "earthquake_data.csv"),
+                index_col=0, parse_dates=True
+            )
+            es_geo_matrix = pd.read_csv(
+                os.path.join(data_path, "es_geo_matrix.csv"), index_col=0
+            )
+            es_sem_matrix = pd.read_csv(
+                os.path.join(data_path, "es_sem_matrix.csv"), index_col=0
+            )
+            gnss_geo_matrix = pd.read_csv(
+                os.path.join(data_path, "gnss_geo_matrix.csv"), index_col=0
+            )
+            with open(os.path.join(data_path, "station_dict_use.pkl"), "rb") as f:
+                station_dict_use = pickle.load(f)
+            with open(os.path.join(data_path, "grid_data", "grid_id_map.pkl"), "rb") as f:
+                earthquake_dict_use = pickle.load(f)
+        except FileNotFoundError as e:
+            print(f"跳过地区 {area}，因为缺少文件：{e}")
+            continue
+
+        area_dataset = EarthquakeGNSSDataset(             
+                area=area,
+                earthquake_data=earthquake_data,
+                es_geo_matrix=es_geo_matrix,
+                es_sem_matrix=es_sem_matrix,
+                gnss_geo_matrix=gnss_geo_matrix,
+                gnss_data=gnss_data,
+                geo_percentage=geo_percentage,
+                sem_percentage=sem_percentage,
+                lape_dim=lape_dim,
+                station_dict_use=station_dict_use,
+                earthquake_dict_use=earthquake_dict_use,
+                window_size=window_size,
+                forecast_horizon=forecast_horizon,
+                earthquake_threshold=4,
+                time_resolution=time_resolution,
+                earthquake_catalog_window=earthquake_catalog_window,
+                minist_threshold=minist_threshold,
+                start_date=start_date,
+                last_date=last_date,
+            )    
         
         # 验证集划分：比例切分或日期切分
         total_length = len(area_dataset)
@@ -901,43 +944,58 @@ def get_dataset(data_dir, window_size, forecast_horizon, lape_dim, geo_percentag
             val_indices = indices[train_size:]
         
         if split_by_earthquake_happen:
-            # 根据 earthquake_happen 进一步划分
             train_indices_happen = [idx for idx in train_indices if area_dataset.earthquake_happen_list[idx]]
             train_indices_no_happen = [idx for idx in train_indices if not area_dataset.earthquake_happen_list[idx]]
             val_indices_happen = [idx for idx in val_indices if area_dataset.earthquake_happen_list[idx]]
             val_indices_no_happen = [idx for idx in val_indices if not area_dataset.earthquake_happen_list[idx]]
 
-            # 创建训练集和验证集的 Subset 实例
             train_subset_happen = Subset(area_dataset, train_indices_happen)
             train_subset_no_happen = Subset(area_dataset, train_indices_no_happen)
             val_subset_happen = Subset(area_dataset, val_indices_happen)
             val_subset_no_happen = Subset(area_dataset, val_indices_no_happen)
             
-            # 将子集存储到字典中
             train_datasets_happen[area] = train_subset_happen
             train_datasets_no_happen[area] = train_subset_no_happen
             val_datasets_happen[area] = val_subset_happen
             val_datasets_no_happen[area] = val_subset_no_happen
         else:
-            # 创建训练集和验证集的 Subset 实例
             train_subset = Subset(area_dataset, train_indices)
             val_subset = Subset(area_dataset, val_indices)
             
-            # 将子集存储到字典中
             train_datasets[area] = train_subset
             val_datasets[area] = val_subset
-            
+    
+    dataset_dict = {}
     if split_by_earthquake_happen:
-        # 创建组合的数据集
         combined_train_dataset_happen = CombinedEarthquakeGNSSDataset(train_datasets_happen)
         combined_train_dataset_no_happen = CombinedEarthquakeGNSSDataset(train_datasets_no_happen)
         combined_val_dataset_happen = CombinedEarthquakeGNSSDataset(val_datasets_happen)
         combined_val_dataset_no_happen = CombinedEarthquakeGNSSDataset(val_datasets_no_happen)
-        
-        return combined_train_dataset_happen, combined_train_dataset_no_happen, combined_val_dataset_happen, combined_val_dataset_no_happen
+        dataset_dict = {
+            'train_happen': combined_train_dataset_happen,
+            'train_no_happen': combined_train_dataset_no_happen,
+            'val_happen': combined_val_dataset_happen,
+            'val_no_happen': combined_val_dataset_no_happen
+        }
+        return dataset_dict
     else:
-        # 创建组合的数据集
         combined_train_dataset = CombinedEarthquakeGNSSDataset(train_datasets)
         combined_val_dataset = CombinedEarthquakeGNSSDataset(val_datasets)
         
-        return combined_train_dataset, combined_val_dataset
+        dataset_dict = {
+            'train': combined_train_dataset,
+            'val': combined_val_dataset
+        }
+        return dataset_dict
+
+
+
+def create_data_loader(dataset, batch_size, shuffle, num_workers=127):
+    """通用 DataLoader 创建函数。"""
+    return DataLoader(
+        dataset, 
+        batch_size=batch_size, 
+        shuffle=shuffle, 
+        collate_fn=dataset.collate_fn, 
+        num_workers=num_workers
+    )

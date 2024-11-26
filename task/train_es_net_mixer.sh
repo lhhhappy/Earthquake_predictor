@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # Set the data path and save directory
-Experiment_name="Pretrain_ES_net_mixer_all_area"
+Experiment_name="Pretrain_ES_net_mixer_onlyhappen"
 
 DATA_PATH="/home/linhang/workbench/Earthquake_data/"
 
-SAVE_DIR="/home/linhang/workbench/workbench/Earthquake_predictor/Result/"
+SAVE_DIR="/home/linhang/workbench/workbench/Earthquake_predictor/Result/Pretrain/"
 
 LOG_DIR="${SAVE_DIR}${Experiment_name}/logs"
 MODEL_DIR="${SAVE_DIR}${Experiment_name}/checkpoints"
@@ -16,8 +16,8 @@ predict_window=14
 time_resolution=14
 gnss_history_window=140
 earthquake_history_window_day=1400
-pdm_d_model=64
-dropout=0.2
+pdm_d_model=32
+dropout=0.5
 
 output_window=$((predict_window / time_resolution))
 predict_day_class=0
@@ -34,7 +34,7 @@ cat <<EOF > model_params.json
     "down_sampling_method": "avg",
     "down_sampling_window": 2,
     "down_sampling_layers": 3,
-    "pdm_layers": 3,
+    "pdm_layers": 2,
     "pdm_d_model": $pdm_d_model,
     "pdm_d_ff": $pdm_d_ff,
     "pdm_dropout": $dropout,
@@ -46,7 +46,7 @@ cat <<EOF > model_params.json
     "attn_drop": $dropout,
     "proj_drop": $dropout,
     "mlp_ratio": 1.0,
-    "enc_depth": 2,
+    "enc_depth": 1,
     "type_ln": "pre",
     "prediction_day_head": $predict_day_class,
     "prediction_energy_len": $output_window
@@ -87,4 +87,8 @@ python train.py \
     --time-resolution $time_resolution \
     --earthquake-catalog-window $earthquake_history_window_day \
     --train-percentage 0.8 \
-    --use-area "all" 
+    --use-area "California (Southern)" \
+    --spilt-by-earthquake-happened True \
+    --use-train-loader "train_happen" \
+    --use-val-loader "val_happen" 
+

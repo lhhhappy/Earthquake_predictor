@@ -11,7 +11,7 @@ from lightning.pytorch.callbacks import EarlyStopping
 from lightning.pytorch.trainer import Trainer
 from lightning.pytorch.callbacks import LearningRateMonitor
 from model import LightingModel
-from dataset import get_dataset
+from dataset import get_dataset, create_data_loader
 from loss import get_loss
 import lightning
 import torch.multiprocessing
@@ -46,12 +46,17 @@ parser.add_argument("--last-date", type=str, default=None, help='End date for tr
 parser.add_argument("--val-date", type=str, default=None, help='Date for validation')
 parser.add_argument("--train-percentage", type=float, default=0.8, help='Percentage of data to use for training')
 parser.add_argument("--use-area", type=str, default=None, help='Area to use for training')
+parser.add_argument("--spilt-by-earthquake-happened", type=bool, default=False, help='Split the dataset by earthquake happened or not') 
+parser.add_argument("--use-train-loader", type=str, default=None, help='Use train loader for training')
+parser.add_argument("--use-val-loader", type=str, default=None, help='Use val loader for validation')
+
 args = parser.parse_args()
 
 # Load dataset
 lightning.seed_everything(args.seed)
 
-train_dataset, val_dataset = get_dataset(
+
+dataset_dict = get_dataset(
     data_dir=args.data_path,
     window_size=args.history_window,
     forecast_horizon=args.forecast_window,
@@ -64,21 +69,34 @@ train_dataset, val_dataset = get_dataset(
     last_date=args.last_date,
     val_date=args.val_date,
     train_percentage=args.train_percentage,
-    use_area=args.use_area
+    use_area=args.use_area,
+    split_by_earthquake_happen=args.spilt_by_earthquake_happened
+)
+
+# 创建 DataLoader
+loader_dict = {}
+for key, dataset in dataset_dict.items():
+    is_train = "train" in key
+    loader_dict[key] = DataLoader(
+        dataset,
+        batch_size=args.batch_size if is_train else args.val_batch_size,
+        shuffle=is_train,
+        collate_fn=dataset.collate_fn,
+        num_workers=127
     )
 
-# Define loss function
+train_loader_key = args.use_train_loader or ("train" if not args.spilt_by_earthquake_happened else "train_happen")
+val_loader_key = args.use_val_loader or ("val" if not args.spilt_by_earthquake_happened else "val_happen")
+
+train_loader = loader_dict.get(train_loader_key)
+val_loader = loader_dict.get(val_loader_key)
+
+if train_loader is None or val_loader is None:
+    raise ValueError(f"Invalid loader keys: train_loader_key={train_loader_key}, val_loader_key={val_loader_key}")
+
+
 loss_fn = get_loss(energy_loss=args.energy_loss, day_loss=args.day_loss)
 
-# Create DataLoaders for training and validation
-train_loader = DataLoader(
-    train_dataset, batch_size=args.batch_size, shuffle=True, collate_fn=train_dataset.collate_fn, num_workers=127
-)
-val_loader = DataLoader(
-    val_dataset, batch_size=args.val_batch_size, shuffle=False, collate_fn=train_dataset.collate_fn, num_workers=127
-)
-
-# Load model parameters from JSON string
 with open(args.model_params, 'r') as f:
     model_par = json.load(f)
 
