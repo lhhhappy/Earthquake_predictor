@@ -15,6 +15,10 @@ import copy
 from functools import lru_cache
 from torch.utils.data import Subset
 from torch.utils.data import DataLoader
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
+from matplotlib.patches import Rectangle
+
 
 def normalize(data, method='min-max'):
     """
@@ -130,11 +134,11 @@ class EarthquakeGNSSDataset(Dataset):
                  earthquake_data, gnss_data,
                  es_geo_matrix, es_sem_matrix, gnss_geo_matrix,
                  geo_percentage, sem_percentage, lape_dim, earthquake_dict_use, station_dict_use,
-                 window_size=14, forecast_horizon=14, time_resolution=14, earthquake_catalog_window=1400,
+                 window_size=14, forecast_horizon=14, time_resolution=14, earthquake_catalog_window=1400,location=None,
                  earthquake_threshold=4.0, missing_threshold=5, start_date=None, last_date=None, minist_threshold=5):
         
         """
-        地震-GNSS数据集的自定义Dataset类。
+        地震-GNSS数据集的自定��Dataset类。
 
         参数：
         - area: 区域名称。
@@ -152,6 +156,7 @@ class EarthquakeGNSSDataset(Dataset):
         - last_date: 限制数据集的结束日期，格式为 'YYYY-MM-DD'。
         """
         self.area = area
+        self.location = location
         self.earthquake_data = earthquake_data
         self.window_size = window_size
         self.forecast_horizon = forecast_horizon
@@ -353,6 +358,59 @@ class EarthquakeGNSSDataset(Dataset):
         earthquake_happen = (earthquake_data_future >= self.earthquake_threshold).any().any()
         return earthquake_happen
     
+    def visualize_regions(self):
+        """
+        可视化每个区域的地图，绘制矩形框并显示。
+        """
+        lat_min, lat_max, lon_min, lon_max = self.location
+        region = self.area  # 假设 self.area 为当前区域的名称
+        gnss_location,es_location = self.station_location, self.earthquake_location
+
+        # 创建地图
+        fig, ax = plt.subplots(figsize=(8, 8), subplot_kw={'projection': ccrs.PlateCarree()})
+
+        # 添加地理特征
+        ax.add_feature(cfeature.LAND, zorder=0, edgecolor='black', facecolor='lightgray')
+        ax.add_feature(cfeature.COASTLINE)
+        ax.add_feature(cfeature.BORDERS, linestyle=':')
+
+        # 绘制矩形框
+        rect = Rectangle(
+            (lon_min, lat_min),  # 左下角坐标
+            lon_max - lon_min,  # 宽度
+            lat_max - lat_min,  # 高度
+            linewidth=2, edgecolor='red', facecolor='none'
+        )
+        ax.add_patch(rect)
+
+        # 标注区域名称
+        ax.text(lon_min, lat_max, region, fontsize=12, color='blue', transform=ccrs.PlateCarree())
+
+        # 设置地图范围，稍微扩展以便观察
+        ax.set_extent([lon_min -1, lon_max +1 , lat_min -1, lat_max +1], crs=ccrs.PlateCarree())
+
+        # ��制 GNSS 站点位置
+        if gnss_location is not None and gnss_location.shape[0] > 0:
+            gnss_lat = gnss_location[:, 0]
+            gnss_lon = gnss_location[:, 1]
+            ax.scatter(gnss_lon, gnss_lat, color='blue', s=30, label='GNSS Station', transform=ccrs.PlateCarree(), marker='^')
+
+        # 绘制地震站点位置
+        if es_location is not None and es_location.shape[0] > 0:
+            es_lat = es_location[:, 0]
+            es_lon = es_location[:, 1]
+            ax.scatter(es_lon, es_lat, color='red', s=30, label='Earthquake grid', transform=ccrs.PlateCarree(), marker='*')
+
+        # 添加图例
+        ax.legend(loc='upper right', fontsize=10)
+
+        # 添加网格
+        ax.gridlines(draw_labels=True, dms=True, x_inline=False, y_inline=False)
+
+        # 显示地图
+        plt.title(f"Region: {region}", fontsize=14)
+        plt.show()
+    
     @staticmethod
     def max_consecutive_trues(arr):
         """
@@ -368,7 +426,7 @@ class EarthquakeGNSSDataset(Dataset):
         arr_int = arr.astype(int)
         # 在每行的开头和结尾添加零
         padded = np.pad(arr_int, ((0, 0), (1, 1)), mode='constant', constant_values=0)
-        # 计算差分
+        # 计���差分
         diff = np.diff(padded, axis=1)
         # 找到连续True的开始和结束索引
         run_starts = np.where(diff == 1)
@@ -516,7 +574,7 @@ def find_first_earthquake(earthquake_catalog, threshold):
 
     参数:
     - earthquake_catalog (pd.DataFrame): 地震目录，每个值为地震震级，行名为日期。
-    - threshold (float): 震级��值。
+    - threshold (float): 震级阈值。
 
     返回:
     - result_vector (np.ndarray): (num_stations, 1)的向量，表示第一个超过阈值的地震发生的行数。
@@ -565,7 +623,7 @@ def graph_laplacian_embedding(adj_matrix, k):
     # 特征分解
     eigenvalues, eigenvectors = torch.linalg.eigh(laplacian)
     
-    # 选择k个最小的非平凡特征向量
+    # 选择k个最小的非平��特征向量
     selected_eigenvectors = eigenvectors[:, 1:k+1]
 
     return selected_eigenvectors
@@ -656,7 +714,7 @@ class CombinedEarthquakeGNSSDataset(Dataset):
         用于组合不同区域数据集的类。
 
         参数：
-        - region_datasets: 一个字典，键为区域名称，值为 EarthquakeGNSSDataset 的实例。
+        - region_datasets: 一个字典���键为区域名称，值为 EarthquakeGNSSDataset 的实例。
         """
         self.region_datasets = region_datasets
         self.region_names = list(region_datasets.keys())
@@ -869,8 +927,11 @@ def get_dataset(data_dir, window_size, forecast_horizon, lape_dim, geo_percentag
         # 初始化四个子数据集的字典
         train_datasets_happen = {}
         train_datasets_no_happen = {}
+        train_datasets_all = {}
         val_datasets_happen = {}
         val_datasets_no_happen = {}
+        val_datasets_all = {}
+
     else:
         # 初始化原始的训练集和验证集字典
         train_datasets = {}
@@ -942,26 +1003,34 @@ def get_dataset(data_dir, window_size, forecast_horizon, lape_dim, geo_percentag
             train_size = int(train_percentage * total_length)
             train_indices = indices[:train_size]
             val_indices = indices[train_size:]
-        
+
         if split_by_earthquake_happen:
             train_indices_happen = [idx for idx in train_indices if area_dataset.earthquake_happen_list[idx]]
             train_indices_no_happen = [idx for idx in train_indices if not area_dataset.earthquake_happen_list[idx]]
             val_indices_happen = [idx for idx in val_indices if area_dataset.earthquake_happen_list[idx]]
             val_indices_no_happen = [idx for idx in val_indices if not area_dataset.earthquake_happen_list[idx]]
 
+            # 创建子集
             train_subset_happen = Subset(area_dataset, train_indices_happen)
             train_subset_no_happen = Subset(area_dataset, train_indices_no_happen)
+            train_dataset_all = Subset(area_dataset, train_indices)
             val_subset_happen = Subset(area_dataset, val_indices_happen)
             val_subset_no_happen = Subset(area_dataset, val_indices_no_happen)
-            
+            val_dataset_all = Subset(area_dataset, val_indices)
+
+            # 存入字典
             train_datasets_happen[area] = train_subset_happen
             train_datasets_no_happen[area] = train_subset_no_happen
+            train_datasets_all[area] = train_dataset_all
             val_datasets_happen[area] = val_subset_happen
             val_datasets_no_happen[area] = val_subset_no_happen
+            val_datasets_all[area] = val_dataset_all
         else:
+            # 不按地震发生情况划分
             train_subset = Subset(area_dataset, train_indices)
             val_subset = Subset(area_dataset, val_indices)
-            
+
+            # 存入字典
             train_datasets[area] = train_subset
             val_datasets[area] = val_subset
     
@@ -969,13 +1038,18 @@ def get_dataset(data_dir, window_size, forecast_horizon, lape_dim, geo_percentag
     if split_by_earthquake_happen:
         combined_train_dataset_happen = CombinedEarthquakeGNSSDataset(train_datasets_happen)
         combined_train_dataset_no_happen = CombinedEarthquakeGNSSDataset(train_datasets_no_happen)
+        combined_train_dataset_all = CombinedEarthquakeGNSSDataset(train_datasets_all)
         combined_val_dataset_happen = CombinedEarthquakeGNSSDataset(val_datasets_happen)
         combined_val_dataset_no_happen = CombinedEarthquakeGNSSDataset(val_datasets_no_happen)
+        combined_val_dataset_all = CombinedEarthquakeGNSSDataset(val_datasets_all)
+
         dataset_dict = {
             'train_happen': combined_train_dataset_happen,
             'train_no_happen': combined_train_dataset_no_happen,
             'val_happen': combined_val_dataset_happen,
-            'val_no_happen': combined_val_dataset_no_happen
+            'val_no_happen': combined_val_dataset_no_happen,
+            "train_all": combined_train_dataset_all,
+            "val_all": combined_val_dataset_all
         }
         return dataset_dict
     else:
@@ -999,3 +1073,4 @@ def create_data_loader(dataset, batch_size, shuffle, num_workers=127):
         collate_fn=dataset.collate_fn, 
         num_workers=num_workers
     )
+

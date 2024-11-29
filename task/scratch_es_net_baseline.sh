@@ -75,5 +75,8 @@ python train.py \
     --val-date "2021-09-04" \
     --train-percentage 0.7 \
     --seed 0 \
-    --use-area "California (Southern)"
+    --use-area "California (Southern)" \
+    --spilt-by-earthquake-happened True \
+    --use-train-loader "train_happen" \
+    --use-val-loader "val_all" 
 

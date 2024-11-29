@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Set the data path and save directory
-Experiment_name="Scratch_ES_net_mixer_california_tssloss_use_revin"
+Experiment_name="Scratch_ES_net_mixer_california_tssloss_use_revin_train_happen_dropout0.5"
 
 DATA_PATH="/home/linhang/workbench/Earthquake_data/"
 
@@ -17,7 +17,7 @@ time_resolution=14
 gnss_history_window=140
 earthquake_history_window_day=1400
 pdm_d_model=32
-dropout=0.3
+dropout=0.5
 
 output_window=$((predict_window / time_resolution))
 predict_day_class=0
@@ -93,5 +93,8 @@ python train.py \
     --val-date "2021-09-04" \
     --train-percentage 0.7 \
     --seed 0 \
-    --use-area "California (Southern)"
+    --use-area "California (Southern)" \
+    --spilt-by-earthquake-happened True \
+    --use-train-loader "train_happen" \
+    --use-val-loader "val_all" 
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Set the data path and save directory
-Experiment_name="Pretrain_ES_net_mixer_onlyhappen"
+Experiment_name="Pretrain_ES_net_mixer_California_power_tss"
 
 DATA_PATH="/home/linhang/workbench/Earthquake_data/"
 
@@ -17,7 +17,7 @@ time_resolution=14
 gnss_history_window=140
 earthquake_history_window_day=1400
 pdm_d_model=32
-dropout=0.5
+dropout=0.3
 
 output_window=$((predict_window / time_resolution))
 predict_day_class=0
@@ -34,14 +34,14 @@ cat <<EOF > model_params.json
     "down_sampling_method": "avg",
     "down_sampling_window": 2,
     "down_sampling_layers": 3,
-    "pdm_layers": 2,
+    "pdm_layers": 1,
     "pdm_d_model": $pdm_d_model,
     "pdm_d_ff": $pdm_d_ff,
     "pdm_dropout": $dropout,
     "pdm_decomp_method": "moving_avg",
     "pdm_moving_avg_kernel": 3,
-    "geo_num_heads": 2,
-    "sem_num_heads": 2,
+    "geo_num_heads": 1,
+    "sem_num_heads": 1,
     "qkv_bias": true,
     "attn_drop": $dropout,
     "proj_drop": $dropout,
@@ -69,7 +69,7 @@ cp model_params.json "$EXPERIMENTS_DIR/model_params.json"
 python train.py \
     --data-path $DATA_PATH \
     --model-arch "ES_net_mixer" \
-    --energy-loss "tss" \
+    --energy-loss "power_tss" \
     --day-loss "None" \
     --batch-size 4 \
     --val-batch-size 4 \
@@ -89,6 +89,6 @@ python train.py \
     --train-percentage 0.8 \
     --use-area "California (Southern)" \
     --spilt-by-earthquake-happened True \
-    --use-train-loader "train_happen" \
-    --use-val-loader "val_happen" 
+    --use-train-loader "train_all" \
+    --use-val-loader "val_all" 
 
