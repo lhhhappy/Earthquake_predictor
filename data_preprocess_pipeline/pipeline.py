@@ -19,19 +19,13 @@ end_year = 2023
         
 """ 
 area_dict = {
-    "California (Southern)": [32, 37, -120, -115],  # 加州南部
-    "Ibaraki": [35, 40, 139, 144],  # 茨城县
-    "Hokkaido": [40, 45, 141, 147],  # 北海道
-    "Miyagi": [37, 42, 140, 145],  # 宫城县
-    "Fukushima": [36, 41, 140, 145],  # 福岛
-    "Kumamoto": [32, 37, 130, 135],  # 熊本
-    "Anchorage": [60, 65, -150, -145],  # 安克雷奇
+    "California (Southern)": [33, 35, -118, -116],  # 加州南部
 }
 
 for area, [minlat, maxlat, minlon, maxlon] in area_dict.items():
-    save_path = "/home/linhang/workbench/Earthquake_data/"+area
-    topk = 100
-    lat_step, lon_step = 0.1, 0.1
+    save_path = "/home/linhang/workbench/Earthquake_data_22/"+area
+    topk = 1
+    lat_step, lon_step = 2,2
 
     # 时间范围
     
