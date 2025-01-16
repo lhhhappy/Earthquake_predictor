@@ -22,10 +22,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import confusion_matrix
 
-def calculate_earthquake_threshold(energy_predict_all,earthquake_future_all,threshold):
+def calculate_earthquake_threshold(energy_predict_all,threshold):
     earthquake_happen_predict = (energy_predict_all>threshold)
-    earthquake_happen_real = (earthquake_future_all>threshold)
-    return earthquake_happen_predict,earthquake_happen_real
+
+    return earthquake_happen_predict
 
 def plot_confusion_matrix(energy_predict_all, earthquake_happen_all, threshold = 3.29):
     """
@@ -43,10 +43,10 @@ def plot_confusion_matrix(energy_predict_all, earthquake_happen_all, threshold =
     earthquake_target = earthquake_happen_all.cpu().numpy().flatten()
 
     # 将连续的预测值转为分类标签
-    earthquake_happen_predict, earthquake_happen_real = calculate_earthquake_threshold(energy_predict, earthquake_target, threshold=threshold)
+    earthquake_happen_predict = calculate_earthquake_threshold(energy_predict, threshold=threshold)
 
     # 计算混淆矩阵
-    confusion_matrix_result = confusion_matrix(earthquake_happen_real, earthquake_happen_predict, labels=labels)
+    confusion_matrix_result = confusion_matrix(earthquake_happen_all, earthquake_happen_predict, labels=labels)
 
     # 提取混淆矩阵中的元素
     TP = confusion_matrix_result[1, 1]

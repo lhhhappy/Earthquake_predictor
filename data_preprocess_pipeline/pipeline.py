@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 # 参数设置
-earthquake_start_year = 1980
+earthquake_start_year = 2000
 station_start_year = 2000
 end_year = 2023
 
@@ -19,13 +19,14 @@ end_year = 2023
         
 """ 
 area_dict = {
-    "California (Southern)": [33, 35, -118, -116],  # 加州南部
+    "Anchoragebig": [54, 65, -165, -141],
 }
 
+
 for area, [minlat, maxlat, minlon, maxlon] in area_dict.items():
-    save_path = "/home/linhang/workbench/Earthquake_data_22/"+area
+    save_path = "/home/linhang/workbench/Earthquake_data_V2/"+area
     topk = 1
-    lat_step, lon_step = 2,2
+    lat_step, lon_step = abs(maxlat-minlat), abs(maxlon-minlon)  # 网格步长
 
     # 时间范围
     
@@ -37,13 +38,6 @@ for area, [minlat, maxlat, minlon, maxlon] in area_dict.items():
     station_dict_all = pickle.load(open('data_preprocess_pipeline/station_dict_all.pkl', 'rb'))
 
     #修正 get_use_station_dict 函数定义中的参数顺序
-    def get_use_station_dict(station_dict_all, minlatitude, maxlatitude, minlongitude, maxlongitude):
-        station_dict_use = {}
-        for station_name, station_dict in station_dict_all.items():
-            lat, lon = eval(station_dict[0]), eval(station_dict[1])
-            if minlatitude <= lat <= maxlatitude and minlongitude <= lon <= maxlongitude:
-                station_dict_use[station_name] = station_dict
-        return station_dict_use
 
     station_dict_use = get_use_station_dict(
         station_dict_all,
@@ -55,7 +49,7 @@ for area, [minlat, maxlat, minlon, maxlon] in area_dict.items():
     station_names = list(station_dict_use.keys())
     print(f"处理区域: {area}")
     print(f"使用的站点数量: {len(station_names)}")
-    if len(station_names) <= 30:
+    if len(station_names) <= 5:
         print("该区域站点数量过少，跳过")
         continue
 

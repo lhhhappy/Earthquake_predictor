@@ -12,22 +12,23 @@ from scipy.signal import savgol_filter
 from joblib import Parallel, delayed
 
 
-def download_earthquake_data(start_year, end_year, minlatitude, maxlatitude, minlongitude, maxlongitude,save_path,minmagnitude=2.5):
+def download_earthquake_data(start_year, end_year, minlatitude, maxlatitude, minlongitude, maxlongitude, save_path, minmagnitude=2.5):
     os.makedirs(save_path, exist_ok=True)
     for year in range(start_year, end_year + 1):
-        box_events = search(starttime=datetime(year, 1, 1, 00, 00), endtime=datetime(year+1, 1, 1, 00, 00),
-                    minlatitude=minlatitude, maxlatitude=maxlatitude, minlongitude=minlongitude, maxlongitude=maxlongitude,
-                    minmagnitude=minmagnitude, maxmagnitude=10)
+        box_events = search(starttime=datetime(year, 1, 1, 00, 00), endtime=datetime(year + 1, 1, 1, 00, 00),
+                            minlatitude=minlatitude, maxlatitude=maxlatitude, minlongitude=minlongitude,
+                            maxlongitude=maxlongitude,
+                            minmagnitude=minmagnitude, maxmagnitude=10)
         events_data = [{
-        'ID': event.id,
-        'Time': event.time,
-        'Magnitude': event.magnitude,
-        'Latitude': event.latitude,
-        'Longitude': event.longitude,
-        'Depth': event.depth
+            'ID': event.id,
+            'Time': event.time,
+            'Magnitude': event.magnitude,
+            'Latitude': event.latitude,
+            'Longitude': event.longitude,
+            'Depth': event.depth
         } for event in box_events]
         df = pd.DataFrame(events_data)
-        df.to_csv(save_path+'/earthquakes_{}.csv'.format(year), index=False)
+        df.to_csv(save_path + '/earthquakes_{}.csv'.format(year), index=False)
         print('Year {} has {} events'.format(year, len(events_data)))
 
 
@@ -42,6 +43,7 @@ def download_GNSS_data(station_names, save_path):
             print(f"下载成功: {file_url}")
         else:
             print(f"下载失败: {file_url}, 状态码: {response.status_code}")
+
     os.makedirs(save_path, exist_ok=True)
     # 循环下载每个站点的 .tenv3 文件
     for station_name in station_names:
@@ -51,18 +53,16 @@ def download_GNSS_data(station_names, save_path):
         if os.path.exists(download_path):
             print(f"已经下载过: {station_name}")
             continue
-        
+
         download_file(url, download_path)
 
 
-
-def get_use_station_dict(station_dict_all,maxlatitude,minlatitude,minlongitude,maxlongitude):
+def get_use_station_dict(station_dict_all, maxlatitude, minlatitude, minlongitude, maxlongitude):
     station_dict_use = {}
     for station_name, station_dict in station_dict_all.items():
-        if station_dict['latitude'] >= minlatitude and station_dict['latitude'] <= maxlatitude and station_dict['longitude'] >= minlongitude and station_dict['longitude'] <= maxlongitude:
+        if minlatitude <= station_dict['latitude'] <= maxlatitude and minlongitude <= station_dict['longitude'] <= maxlongitude:
             station_dict_use[station_name] = station_dict
     return station_dict_use
-
 
 
 def process_usgs_data(input_dir, output_dir, lat_min=32, lat_max=36, lon_min=-120, lon_max=-114, lat_step=0.1, lon_step=0.1, topk=None):
@@ -96,6 +96,9 @@ def process_usgs_data(input_dir, output_dir, lat_min=32, lat_max=36, lon_min=-12
 
     # 遍历每个文件并处理数据
     for df_dir in df_list:
+        #排除空文件
+        if os.path.getsize(os.path.join(input_dir, df_dir)) == 0:
+            continue
         df = pd.read_csv(os.path.join(input_dir, df_dir))
         df['LatBin'] = pd.cut(df['Latitude'], bins=lat_bins, labels=lat_bins[:-1])
         df['LonBin'] = pd.cut(df['Longitude'], bins=lon_bins, labels=lon_bins[:-1])
@@ -122,6 +125,11 @@ def process_usgs_data(input_dir, output_dir, lat_min=32, lat_max=36, lon_min=-12
     if topk is not None:
         sorted_grid = sorted_grid[:topk]
 
+    # 如果没有网格，退出函数
+    if len(sorted_grid) == 0:
+        print("没有可用的网格数据。")
+        return {}
+
     # 重新为前 topk 个网格设置编号为 0 到 topk-1
     grid_id_map = {sorted_grid[i][0]: i for i in range(len(sorted_grid))}
     # 创建输出目录
@@ -141,7 +149,7 @@ def process_usgs_data(input_dir, output_dir, lat_min=32, lat_max=36, lon_min=-12
     with open(os.path.join(output_dir, 'grid_id_map.pkl'), 'wb') as f:
         pickle.dump(grid_dict, f)
 
-    print(f"所有前 {topk} 个网格数据已保存，并为这些网格设置了 0 到 {topk-1} 的编号。")
+    print(f"所有前 {len(sorted_grid)} 个网格数据已保存，并为这些网格设置了 0 到 {len(sorted_grid)-1} 的编号。")
     return grid_dict
 
 
@@ -159,40 +167,39 @@ def process_energy_data(input_dir, output_dir, start_date='1986-01-01', end_date
     # 列出目录下的文件
     data_list = os.listdir(input_dir)
     data_list = [x for x in data_list if x.endswith('.csv')]
-    
+
     # 创建输出目录
     os.makedirs(output_dir, exist_ok=True)
-    
+
     # 遍历每个文件并处理数据
     count = 0
     for data_dir in data_list:
         file_path = os.path.join(input_dir, data_dir)
 
-        
         # 检查文件是否存在且非空
         if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
             try:
                 data = pd.read_csv(file_path)
             except pd.errors.EmptyDataError:
                 continue
-        
+
             # 处理时间数据
             data['Time'] = pd.to_datetime(data['Time'], format='ISO8601', errors='coerce')
             data.set_index('Time', inplace=True)
             data = data.dropna(subset=['Magnitude'])  # 移除无效的震级数据
 
             # 生成时间区间
-            time_bins = pd.date_range(start=pd.Timestamp(start_date, tz='UTC'), 
-                                      end=pd.Timestamp(end_date, tz='UTC'), 
+            time_bins = pd.date_range(start=pd.Timestamp(start_date, tz='UTC'),
+                                      end=pd.Timestamp(end_date, tz='UTC'),
                                       freq=freq)
-            
+
             # 将数据按时间区间分箱
             data['Time_bin'] = pd.cut(data.index, bins=time_bins, right=True)
-            
+
             # 计算每个时间段的能量
             def calculate_energy(group):
                 return np.sum(10 ** (1.5 * group['Magnitude']))
-            
+
             grouped_energy = data.groupby('Time_bin', observed=False).apply(lambda x: calculate_energy(x))
 
             # 计算对数能量并填充空值
@@ -201,7 +208,7 @@ def process_energy_data(input_dir, output_dir, start_date='1986-01-01', end_date
             log_energy_filled["Energy"] = log_energy.reindex(time_bins[:-1], fill_value=0)
             log_energy_filled["Location_id"] = data['Location_id'].iloc[0]
             log_energy_filled.index = log_energy_filled.index.strftime('%Y-%m-%d')
-            
+
             # 保存处理后的数据
             log_energy_filled.to_csv(os.path.join(output_dir, data_dir + ".csv"), index=True)
             count += 1
@@ -211,7 +218,7 @@ def process_energy_data(input_dir, output_dir, start_date='1986-01-01', end_date
 
 def construct_earthquake_csv(directory, start_date, end_date, output_file):
     """
-    构建包含所有地震站点的最大震级数据的CSV文件。
+    构建包含所有地震站点的最大震级数据的CSV文件，并包括Latitude, Longitude, Depth列。
 
     参数：
     - directory: 包含地震数据的目录路径。
@@ -226,27 +233,45 @@ def construct_earthquake_csv(directory, start_date, end_date, output_file):
     for station_file in file_dir:
         df_temp = pd.DataFrame(index=date_range)
         file_path = os.path.join(directory, station_file)
-        
+
         if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
             try:
                 df = pd.read_csv(file_path)
-                if "Location_id" in df.columns and "Magnitude" in df.columns:
+                if {"Location_id", "Magnitude", "Latitude", "Longitude", "Depth"}.issubset(df.columns):
                     Location_id = df["Location_id"].iloc[0]
-                    # 处理时间并聚合震级数据
+                    
+                    # 处理时间数据
                     df['Time'] = pd.to_datetime(df['Time'], format='ISO8601').dt.date
-                    df = df.groupby('Time').agg({'Magnitude': 'max'}).reset_index()
-                    df.set_index('Time', inplace=True)
-                    magnitude_series = df['Magnitude'].reindex(date_range).fillna(0)
-                    df_temp[Location_id] = magnitude_series
+                    
+                    # 聚合震级及其他列
+                    df_grouped = df.groupby('Time').agg({
+                        'Magnitude': 'max',
+                        'Latitude': 'first',  # 假设同一天的经纬度不变
+                        'Longitude': 'first',
+                        'Depth': 'first'
+                    }).reset_index()
+                    
+                    df_grouped.set_index('Time', inplace=True)
+                    
+                    # 重建时间序列并填充缺失值
+                    df_temp[f"{Location_id}_Magnitude"] = df_grouped['Magnitude'].reindex(date_range).fillna(0)
+                    df_temp[f"{Location_id}_Latitude"] = df_grouped['Latitude'].reindex(date_range).fillna(method='ffill').fillna(method='bfill')
+                    df_temp[f"{Location_id}_Longitude"] = df_grouped['Longitude'].reindex(date_range).fillna(method='ffill').fillna(method='bfill')
+                    df_temp[f"{Location_id}_Depth"] = df_grouped['Depth'].reindex(date_range).fillna(method='ffill').fillna(method='bfill')
+                    
                     data_frames.append(df_temp)
             except pd.errors.EmptyDataError:
                 continue
 
     # 合并所有站点数据，按列排序
-    df = pd.concat(data_frames, axis=1)
-    df = df.sort_index(axis=1)
-    df.to_csv(output_file)
-    return df
+    if data_frames:
+        df = pd.concat(data_frames, axis=1)
+        df = df.sort_index(axis=1)
+        df.to_csv(output_file)
+        return df
+    else:
+        print("没有有效的地震数据可供处理。")
+        return None
 
 
 def construct_energy_csv(directory, output_file):
@@ -262,7 +287,7 @@ def construct_energy_csv(directory, output_file):
     for station_file in os.listdir(directory):
         file_path = os.path.join(directory, station_file)
         df_temp = pd.DataFrame()
-        
+
         if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
             try:
                 df = pd.read_csv(file_path, index_col=0)
@@ -273,13 +298,17 @@ def construct_energy_csv(directory, output_file):
                     data_frames.append(df_temp)
             except pd.errors.EmptyDataError:
                 continue
-    
+
     # 合并所有站点数据，按列排序
-    print("Length of energy_frames: ", len(data_frames))
-    df = pd.concat(data_frames, axis=1)
-    df = df.sort_index(axis=1)
-    df.to_csv(output_file)
-    return df
+    if data_frames:
+        print("Length of energy_frames: ", len(data_frames))
+        df = pd.concat(data_frames, axis=1)
+        df = df.sort_index(axis=1)
+        df.to_csv(output_file)
+        return df
+    else:
+        print("没有有效的能量数据可供处理。")
+        return None
 
 
 def has_consecutive_nans(series, window=30):
@@ -294,6 +323,7 @@ def has_consecutive_nans(series, window=30):
     bool: 如果存在连续的缺失值，则返回 True，否则返回 False。
     """
     return series.isna().rolling(window=window).apply(lambda x: x.sum() >= window).any()
+
 
 def construct_gnss_csv(directory, start_date, end_date, output_file, station_dict):
     """
@@ -311,19 +341,21 @@ def construct_gnss_csv(directory, start_date, end_date, output_file, station_dic
     station_dict_fliter = {}
     for station_file in os.listdir(directory):
         file_path = os.path.join(directory, station_file)
-        
+
         # 检查文件是否存在且非空
         if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
             try:
                 # 读取文件，假定数据以空格分隔
                 data_day = pd.read_csv(file_path, sep='\s+')
                 data_day['Date'] = pd.to_datetime(data_day['YYMMMDD'], format='%y%b%d')
-                
+
                 # 只保留start_date之后的数据
                 data_day = data_day[data_day['Date'] >= start_date]
 
                 # 合并北向、东向和高程方向上的位移，并计算总位移
-                data_day['combined'] = data_day.apply(lambda row: [row['_north(m)'], row['__east(m)'], row['____up(m)'], np.sqrt(row['__east(m)']**2 + row['_north(m)']**2 + row['____up(m)']**2)], axis=1)
+                data_day['combined'] = data_day.apply(
+                    lambda row: [row['_north(m)'], row['__east(m)'], row['____up(m)'],
+                                 np.sqrt(row['__east(m)'] ** 2 + row['_north(m)'] ** 2 + row['____up(m)'] ** 2)], axis=1)
                 station_name = os.path.splitext(station_file)[0]
                 temp_df = pd.DataFrame(data_day['combined'].values, columns=[station_name], index=data_day['Date'])
                 # 将数据对齐到统一的日期范围
@@ -332,7 +364,7 @@ def construct_gnss_csv(directory, start_date, end_date, output_file, station_dic
                 data_frames.append(temp_df)
                 print(f"监测站 {station_name} 的数据已添加。")
                 station_dict_fliter[station_name] = station_dict[station_name]
-                
+
             except pd.errors.EmptyDataError:
                 print(f"文件 {station_file} 为空，已被忽略。")
                 continue
@@ -345,6 +377,7 @@ def construct_gnss_csv(directory, start_date, end_date, output_file, station_dic
     else:
         print("没有有效的监测站数据。")
     return station_dict_fliter
+
 
 def generate_time_bins(start_date, end_date, time_resolution=14):
     """
@@ -360,8 +393,10 @@ def generate_time_bins(start_date, end_date, time_resolution=14):
     """
     start_date = pd.to_datetime(start_date)
     end_date = pd.to_datetime(end_date)
-    time_bins = pd.date_range(start=start_date, end=end_date + pd.Timedelta(days=time_resolution), freq=f'{time_resolution}D')
+    time_bins = pd.date_range(start=start_date, end=end_date + pd.Timedelta(days=time_resolution),
+                              freq=f'{time_resolution}D')
     return time_bins
+
 
 def no_lag_filter(data, window_length=9, polyorder=3):
     if window_length % 2 == 0:
@@ -369,10 +404,15 @@ def no_lag_filter(data, window_length=9, polyorder=3):
     smoothed_data = savgol_filter(data, window_length=window_length, polyorder=polyorder)
     return smoothed_data
 
+
 def generate_sem_aij(data, output_file, window_length=9, polyorder=3):
-    df = calculate_energy_in_time_window(data, time_resolution = 14)
+    df = calculate_energy_in_time_window(data, time_resolution=14)
     n_columns = df.shape[1]
     similarity_matrix = np.zeros((n_columns, n_columns))
+
+    if n_columns == 0:
+        print("没有足够的网格数据生成邻接矩阵。")
+        return None
 
     # 预处理每列数据，使用无滞后滤波器
     filtered_data = df.apply(lambda col: no_lag_filter(col.values, window_length, polyorder), axis=0)
@@ -383,15 +423,19 @@ def generate_sem_aij(data, output_file, window_length=9, polyorder=3):
         return i, j, distance
 
     # 并行计算距离，并收集结果
-    results = Parallel(n_jobs=-1)(
-        delayed(compute_distance)(i, j) 
-        for i in range(n_columns) 
-        for j in range(i, n_columns)
-    )
+    if n_columns == 1:
+        # 只有一个网格，距离为0
+        similarity_matrix[0, 0] = 0
+    else:
+        results = Parallel(n_jobs=-1)(
+            delayed(compute_distance)(i, j)
+            for i in range(n_columns)
+            for j in range(i, n_columns)
+        )
 
-    for i, j, distance in results:
-        similarity_matrix[i, j] = distance
-        similarity_matrix[j, i] = distance  # 对称矩阵
+        for i, j, distance in results:
+            similarity_matrix[i, j] = distance
+            similarity_matrix[j, i] = distance  # 对称矩阵
     Aij_df = pd.DataFrame(similarity_matrix, index=df.columns, columns=df.columns)
     Aij_df.to_csv(output_file)
     return Aij_df
@@ -399,14 +443,15 @@ def generate_sem_aij(data, output_file, window_length=9, polyorder=3):
 
 from math import radians, sin, cos, sqrt, atan2
 
+
 def haversine_distance(lat1, lon1, lat2, lon2):
     """
     计算两个经纬度点之间的地球表面距离，单位为公里。
-    
+
     参数:
     - lat1, lon1: 第一个点的纬度和经度。
     - lat2, lon2: 第二个点的纬度和经度。
-    
+
     返回:
     - 距离，单位为公里。
     """
@@ -421,34 +466,41 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     r = 6371  # 地球半径，单位为公里
     return r * c
 
-def generate_geo_aij(station_dict,save_path):
+
+def generate_geo_aij(station_dict, save_path):
     """
     基于站点之间的距离构建邻接矩阵。距离超过阈值的站点将不连接。
-    
+
     参数:
     - station_dict: 包含站点名和经纬度的字典，格式为 {站点名: (纬度, 经度)}。
-    - distance_threshold: 站点之间距离的阈值，超过该距离的站点不连接。
-    
+
     返回:
     - 邻接矩阵Aij (pd.DataFrame)。
     """
     station_names = list(station_dict.keys())
     num_stations = len(station_names)
-    
+
     # 初始化邻接矩阵
     Aij = np.zeros((num_stations, num_stations))
 
+    if num_stations == 0:
+        print("没有足够的站点数据生成邻接矩阵。")
+        return None
+
     # 计算所有站点之间的距离
-    for i, station1 in enumerate(station_names):
-        for j, station2 in enumerate(station_names):
-            if i != j:
-                lat1, lon1 = station_dict[station1]
-                lat2, lon2 = station_dict[station2]
-                lat1, lon1, lat2, lon2 = map(float, [lat1, lon1, lat2, lon2])
-                distance = haversine_distance(lat1, lon1, lat2, lon2)
-                
-                Aij[i, j] = distance
-                Aij[j, i] = distance
+    if num_stations == 1:
+        Aij[0, 0] = 0
+    else:
+        for i, station1 in enumerate(station_names):
+            for j, station2 in enumerate(station_names):
+                if i != j:
+                    lat1, lon1 = station_dict[station1]
+                    lat2, lon2 = station_dict[station2]
+                    lat1, lon1, lat2, lon2 = map(float, [lat1, lon1, lat2, lon2])
+                    distance = haversine_distance(lat1, lon1, lat2, lon2)
+
+                    Aij[i, j] = distance
+                    Aij[j, i] = distance
 
     Aij_df = pd.DataFrame(Aij, index=station_names, columns=station_names)
     Aij_df.to_csv(save_path)
@@ -496,3 +548,12 @@ def calculate_energy_in_time_window(data, time_resolution=14):
     log_energy_filled.index = log_energy_filled.index.map(lambda x: x.left.strftime('%Y-%m-%d'))
 
     return log_energy_filled
+
+
+def get_use_station_dict(station_dict_all, minlatitude, maxlatitude, minlongitude, maxlongitude):
+    station_dict_use = {}
+    for station_name, station_dict in station_dict_all.items():
+        lat, lon = (station_dict[0]), (station_dict[1])
+        if minlatitude <= lat <= maxlatitude and minlongitude <= lon <= maxlongitude:
+            station_dict_use[station_name] = station_dict
+    return station_dict_use
